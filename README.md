@@ -1,6 +1,6 @@
 ## grblHAL ##
 
-Small modifications for Flexi-HAL to enable inspection light.  All core config now done through platformio.ini in the driver.
+Small Updates for Flexi-HAL to enable inspection light.  All core config now done through platformio.ini in the driver.
 
 
 grblHAL has [many extensions](https://github.com/grblHAL/core/wiki) that may cause issues with some senders. As a workaround for these a [compile time option](https://github.com/grblHAL/core/wiki/Changes-from-grbl-1.1#workaround) has been added that disables extensions selectively. 
