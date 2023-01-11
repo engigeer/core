@@ -1,20 +1,387 @@
 ## grblHAL changelog
 
+<a name="20221115"/>Build 20221115
+
+Core:
+
+* Updated settings reports to output correct units and descriptions for settings related to axes configured as rotary.  
+__Note:__ Senders may have to be restarted to display these after a configuration change \($376 - rotatational axes\) and even then they might not display them correctly.
+
+* Internal change to allow flagging settings to have a minimum value or length different from 0 and still allow to them to be 0 or have length 0.
+
+Plugins:
+
+* Some: updated for core settings change.
+
+Drivers:
+
+* Some: updated for core settings change.
+
+---
+
+<a name="20221101"/>Build 20221101
+
+Core:
+
+* Added single axis homing commands for U and V, remapping of ABC homing commands to UVW when configured.
+
+Plugins
+
+* WebUI and Networking: fixes for compiler warnings.
+
+Drivers:
+
+* ESP32: fix for Web Builder failing when networking was enabled.
+
+---
+
+<a name="20221031"/>20221031
+
+Core:
+
+* Minor change to suppress compiler warnings for SAM3X8E (Arduino Due - bad framework code).
+
+Drivers:
+
+* SAM3X8E : More compiler warnings supression, added missing PWM output for Mega2560 board map.
+
+* Some: Updated Web Builder definitions.
+
+---
+
+<a name="20221028"/>Build 20221028
+
+Core:
+
+* Minor bug fix, preprocessor tuning.
+
+Drivers:
+
+* LPC176x: fix for issue [#31](https://github.com/grblHAL/LPC176x/issues/31).
+
+* Some: Fixed some obscure bugs, updates for Web Builder.
+
+---
+
+<a name="20221023"/>Build 20221023
+
+Core:
+
+* Fix for issue #209, incorrect handling of homing of more than one auto squared axis in each pass. Error 55 will now be returned.
+
+---
+
+<a name="20221022"/>Build 20221022
+
+Core:
+
+* Fix for old regression, issue #204.
+
+* Now hides spindle PWM related settings if no PWM spindle is available.
+
+Drivers:
+
+* Many: Fixes for incorrect code related to new spindle type property introduced in build 20221018. Updated [Web Builder](http://svn.io-engineering.com:8080/) data.
+
+---
+
+<a name="20221018"/>Build 20221018
+
+Core:
+
+* Added new setting `$346` for action to take after tool change: either return controlled point \(tool tip\) back to the same position as before the M6 command \(default\) or move spindle to Z home only.
+
+* Added spindle type property to HAL, "hardened" code.
+
+* Fix for issue #191, allow homing of rotary axes with infinite rotation \(max travel = 0\).
+
+Plugins:
+
+* Spindle: Added spindle type property to registration data.
+
+* Fans: Bug fix, added off delay option for fan 0 with setting `$480` specifying number of minutes to delay. Useful for allowing an exhaust fan to clear a laser cutter enclosure before turning it off.  
+__Note:__ The new setting may cause a reset of other plugin settings to default values, backup and restore.
+
+* Laser coolant: implemented off delay and coolant lost monitoring.
+
+Drivers:
+
+* STM32F4xx: Fix for [issue #99](https://github.com/grblHAL/STM32F4xx/issues/99). Updated spindle registration.
+
+* SAM3X8E: Fix for [issue #15](https://github.com/grblHAL/SAM3X8E/issues/15).
+
+* Many: Improved driver PWM spindle code.
+
+* Some: Updated for [Web Builder](http://svn.io-engineering.com:8080/) requirements.
+
+---
+
+<a name="20221009"/>Build 20221009
+
+Core:
+
+* Fix for bug preventing some hosts \(Win7\) querying SSDP information.
+
+Plugins:
+
+* WebUI: Removed ESP32 dependency in WiFi SoftAP mode.
+
+Drivers:
+
+* ESP32: Updated for WebUI change.
+
+* RP2040: Fixed WiFi AP mode [issues](https://github.com/grblHAL/RP2040/issues/34), fixed bug in `$314` setting reporting.  
+__NOTE:__ AP mode IP address cannot be changed from the default `192.168.4.1` address.  
+__NOTE:__ There are limitations/bugs in the SDK preventing SSDP queries from arriving, this is likely to be fixed in a later SDK release.
+
+---
+
+<a name="20221005"/>Build 20221005
+
+Core:
+
+* Added optional string pointers to HAL for driver and board URLs. If present they are announced by the SSDP protocol.
+
+Plugins:
+
+* Networking: Added mDNS and SSDP protocol support.  
+__Note:__ Some drivers require manual patching before enabling.
+
+* WebUI: Fix for bugs affecting settings handling. [Issue #5](https://github.com/grblHAL/Plugin_WebUI/issues/5) and [issue #6](https://github.com/grblHAL/Plugin_WebUI/issues/6).  
+__Note:__ Issue 6 was about incorrect handling spaces in string settings, these are not permitted in hostnames according to [RFC1123](https://www.rfc-editor.org/rfc/rfc1123) and I may add validation later.
+
+Drivers:
+
+* iMXRT1062, RP2040, ESP32, STM32F7xx and MSP432E401Y: Added options for enabling mDNS and/or SSDP protocols.  
+__Note:__ iMXRT1062 and RP2040 require manual patching before enabling.
+
+* STM32F1xx: Added two alternatives for spindle PWM pin assignment.
+
+* STM32F4xx: Added support for PWM output on PE5 and PE6 \(for BTT SKR 2.0\).
+
+* STM32F7xx: Updated for latest STM32CubeIDE device driver HAL.
+
+Templates:
+
+* my_plugin/hpgl: Added tentative support for most HP7475A `ESC . ...` device control sequences. _Testing required!_
+
+---
+
+<a name="20220928"/>Build 20220928:
+
+Core:
+
+* Added crossbar support for UART RTS handshake output signal.
+
+Drivers:
+
+* iMXRT1062: Fix for issue [#48](https://github.com/grblHAL/iMXRT1062/issues/48), coolant and mist outputs swapped.
+
+* SAM3X8E: Added SMART Ramps board map. By @MrAntza99.
+
+* RP2040: Added option to use RTS handshaking for UART comms via the primary port. Updated the _citoh_cx6000_ map to use it if UART comms is enabled.
+
+* ESP32: Added laser plugin submodule and updated CMakeLists.txt with enable options for it.
+
+Templates:
+
+* my_plugin/hpgl: Added trapping of more HP7475A \(possibly all?\) `ESC . ...` device control sequences to avoid errors/hangs.
+
+---
+
+<a name="20220925"/>Build 20220925:
+
+Core:
+
+* Added `[AXS:<number of axes>:<axisletters>]` line to `$I` report response, replaces the string `ABC2UVW` from the `NEWOPT` element in the `$I` response.  
+
+* Fixed `|Pn:` real time report element pin state conflict: `F` is now used for motor fault and `M` for motor warning, `U`, `V` and `W` for limit switch status.
+
+Further details can be found in the [wiki](https://github.com/grblHAL/core/wiki/Report-extensions).
+
+Plugins:
+
+* Laser: Added experimental support for LaserBurn clusters, for faster engraving.
+
+* SDCard: Minor tweak to enable plugins to modify the file stream without losing real time report extensions.
+
+Drivers:
+
+* ESP32: added directory for embedded read-only files and moved related files there.
+
+---
+
+<a name="20220922"/>Build 20220922:
+
+Core:
+
+* Changed signature of [spindle_update_caps()](http://svn.io-engineering.com/grblHAL/html/spindle__control_8h.html#a3170b0136a49e0b30047e00bdf4e812c), third party developers must update _driver.c_ if used.
+
+* Removed some superfluous code, improved handling of laser mode M4 for jogging and motion complete event.  
+Bug fixes + expanded step/dir map to 8 axes.
+
+Drivers:
+
+* All: Updated for core signature change.
+
+* STM32F1xx: updated FatFs link to v0.14.
+
+---
+
+<a name="20220920"/>20220920:
+
+Plugins:
+
+* Networking: Fix for http daemon not decoding the base URL when no URL handlers were registered.
+
+* WebUI: Fix for incorrect parsing of ESP701 action parameters.
+
+* Laser (PPI): Bug fixes.
+
+---
+
+<a name="20220918"/>Build 20220918:
+
+Core:
+
+* Added [configuration option](https://github.com/grblHAL/core/blob/master/config.h) `BLOCK_BUFFER_DYNAMIC` for dynamically allocate planner buffer. If enabled setting `$398` can be used to set number of blocks in the buffer.  
+__NOTE:__ A restart of the controller is required after changing `$398`.  
+__NOTE:__ If not enough free memory is available the actual allocation size will be reduced until it fits. The actual allocation can be checked with `$I`.  
+Each block requires around 100 bytes of memory.  
+__NOTE:__ All setting values will be reset when this option is changed, backup and restore!  
+__NOTE:__ In a later version this option will be removed and dynamic allocation will become standard.  
+
+* Added experimental [configuration option](https://github.com/grblHAL/core/blob/master/config.h) `AXIS_REMAP_ABC2UVW` for remapping ABC axis letters to UVW.  
+
+Drivers:
+
+* ESP32: Applied workaround for wifi/pin36/pin39 silicon bug. Reenabled HAL function for reboot.
+
+* STM32F7xx: Added support for up to 8 axes in the driver, with the reference board map only. As of now untested but it compiles and runs!  
+Are there any senders that can candle 8 axes available? [ioSender](https://github.com/terjeio/ioSender) can not but that may change.
+
+Plugins:
+
+* WebUI: added new and missing settings options for ESP400, added axisletters from configuration to ESP800 response.
+
+* SDCard: updated FatFs VFS wrapper for read-only configuration.
+
+* Some: moved reboot required message for some settings to reporting by using a settings flag.
+
+---
+
+Build 20220916:
+
+Core:
+
+* Added setting definitions for WebUI client inactivity timeout and real time report auto interval.
+
+Plugins:
+
+* WebUI: Added support for multiple client switchover and session inactivity timeout. Updated for websocket API changes.  
+Reorganized ESP v2 and v3 protocol code for readability and added settings for client inactivity \(`$396`\) real time report auto interval \(`$397`\).  
+__NOTE:__ This will reset WebUI settings to default and possibly other plugin settings too. Backup and restore!
+
+* Networking: Enhanced websocket daemon API, now allows multiple clients - with the limitation that only one can claim the websocket "serial" stream.
+
+---
+
+20220914:
+
+Core:
+
+* Added optional HAL entry point for getting free memory \(ideally sum of free blocks on the heap\), currently used by WebUI.
+
+Plugins:
+
+* WebUI: Sort ESP400 output by settings group, fixed ESP410 response and added free memory to ESP420 response when available from the HAL.
+Updated for websocket API changes.
+
+* Networking: Removed WebUI specific code from websocket daemon, made API more flexible. Some bug fixes and a bit of code cleanup/refactoring.
+
+* SDCard: Switched to VFS file handling for the YModem protocol.
+
+Drivers:
+
+* iMXRT1062, RP2040, ESP32 and STM32F7xx: added support for free memory HAL entry point.
+
+* ESP32: improved wifi AP scanning.
+
+* MSP432E401Y: added littlefs and WebDAV support.
+
+---
+
+20220912:
+
+Plugins:
+
+* WebUI: Improved ESP800 response, updated embedded fallback page and fixes for file listing error and AP mode handling.
+
+---
+
+20220911:
+
+Core:
+
+* Minor options preprocessor change for littlefs, "hardened" VFS code. Core build date not changed.
+
+Plugins:
+
+* WebUI: Added _all_ grblHAL settings to ESP400 response, file systems handling improvements++. Still WIP, but getting closer to final version!
+
+* Networking: some general enhancements \(for WebUI\).
+
+* SDCard: added VFS wrapper for littlefs. This plugin will be renamed later, likely to _Plugin_storage_.
+
+Drivers:
+
+* iMXRT1062, RP2040 and ESP32: Added [littlefs](https://github.com/littlefs-project/littlefs) support for flash based file storage.
+
+* STM32F7xx: Fixed [typo](https://github.com/grblHAL/core/issues/186#issuecomment-1242943739).
+
+---
+
+20220906:
+
+Core:
+
+* Added `$RTC` system command for outputting or setting current real time clock date and time. Uses ISO8601 format.  
+__Driver developers:__  
+_grbl/limits.h_ has been renamed to _grbl/machine_limits.h_ (along with the _.c_ counterpart).  
+[hal.enumerate_pins](http://svn.io-engineering.com/grblHAL/html/structgrbl__hal__t.html#a661c9aa458a2e6fc5fb1657e121999a3) and the associated [callback function](http://svn.io-engineering.com/grblHAL/html/hal_8h.html#a41e902cfc3da615f9494aba956d895ba) parameter has a new signature, a void pointer has been added. Driver implementations should pass this on to the callback.  
+The HAL version number has been increased to 10 due to this, update _driver.c_ to match!
+
+Plugins:
+
+* WebUI: added many ESP commands to v3 command handler, some code refactoring. Still WIP.
+
+* Networking: some minor bug fixes.
+
+Drivers:
+
+* All: updated for grbl/limits.h name change and HAL version number increase.
+
+* iMXRT1062, STM32F4xx, STM32F7xx and ESP32: Added RTC support.
+
+* ESP32: WebUI backend support improved.
+
+---
+
 20220904:
 
 Core:
 
-* Added optional RTC (Real Time Clock) support to the HAL. VFS improvements.
+* Added optional RTC \(Real Time Clock\) support to the HAL. VFS improvements.
 
 Plugins:
 
-* Networking: improved websocket protocol handling. 
+* Networking: improved websocket subprotocol handling. 
 
 * WebUI: separated command handlers for v2 and v3 and improved detection of v3 clients. Now sets RTC from ESP800 if HAL allows.
 
 Drivers:
 
-* RP2040: Added RTC support++.  
+* RP2040: Added RTC support++.
 
 * iMXRT1062: updated uSDFS patch - needed for VFS changes.
 
@@ -48,7 +415,7 @@ __Note:__ NVS storage of settings has been moved to the end of flash, backup and
 
 Core:
 
-* Addded virtual file system \(VFS\) handler, Linux/Unix style with mount directories.
+* Added virtual file system \(VFS\) handler, Linux/Unix style with mount directories.
 * Now raises alarm if homed state becomes invalid on settings changes when homing on startup is required. Issue #173.
 
 Plugins:

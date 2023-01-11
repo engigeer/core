@@ -1,5 +1,7 @@
 ## grblHAL ##
 
+__New:__ A web app for [building for some drivers](http://svn.io-engineering.com:8080/) is now in the works, feedback will be appreciated.
+
 grblHAL has [many extensions](https://github.com/grblHAL/core/wiki) that may cause issues with some senders. As a workaround for these a [compile time option](https://github.com/grblHAL/core/wiki/Changes-from-grbl-1.1#workaround) has been added that disables extensions selectively. 
 
 __IMPORTANT!__ grblHAL defaults to normally closed \(NC\) switches for inputs, if none are connected when testing it is likely that the controller will start in alarm mode.  
@@ -11,13 +13,14 @@ It has been written to complement grblHAL and has features such as proper keyboa
 
 ---
 
-Latest build date is 20220904, see the [changelog](changelog.md) for details.  
+Latest build date is 20221115, see the [changelog](changelog.md) for details.  
 __NOTE:__ A settings reset will be performed on an update for versions earlier than 20211122. Backup and restore of settings is recommended.  
 __IMPORTANT!__  A new setting has been introduced for ganged axes motors in version 20211121.  
 I have only bench tested this for a couple of drivers, correct function should be verified after updating by those who have more than three motors configured.  
 More details in the [changelog](changelog.md).
 
 ---
+
 Updated for latest core changes.
 __NOTE:__ Arduino drivers has now been converted to Arduino libraries, [installation and compilation procedure](https://github.com/grblHAL/core/wiki/Compiling-GrblHAL) has been changed!
 
@@ -38,7 +41,7 @@ It is able to maintain up to 300kHz<sup>3</sup> of stable, jitter free control p
 
 It accepts standards-compliant g-code and has been tested with the output of several CAM tools with no problems. Arcs, circles and helical motion are fully supported, as well as, all other primary g-code commands. Macro functions, variables, and some canned cycles are not supported, but we think GUIs can do a much better job at translating them into straight g-code anyhow.
 
-Grbl includes full acceleration management with look ahead. That means the controller will look up motions into the future and plan its velocities ahead to deliver smooth acceleration and jerk-free cornering.
+grblHAL includes full acceleration management with look ahead. That means the controller will look up motions into the future and plan its velocities ahead to deliver smooth acceleration and jerk-free cornering.
 
 This is a port/rewrite of [grbl 1.1f](https://github.com/gnea/grbl) and should be compatible with GCode senders compliant with the specifications for that version. It should be possible to change default compile-time configurations if problems arise, eg. the default serial buffer sizes has been increased in some of the [drivers](https://github.com/grblHAL/drivers) provided.
 
@@ -73,9 +76,9 @@ List of Supported G-Codes:
   - Tool Change: M6* (Two modes possible: manual** - supports jogging, ATC), M61
   - Switches: M48, M49, M50, M51, M53
   - Input/uutput control***: M62, M63, M64, M65, M66, M67, M68
-  - Valid Non-Command Words: A*, B*, C*, F, H*, I, J, K, L, N, P, Q*, R, S, T, X, Y, Z
+  - Valid Non-Command Words: A*, B*, C*, D, E*, F, H*, I, J, K, L, N, P, Q*, R, S, T, U*, V*, W*, X, Y, Z
 
-  *  driver/configuration dependent.
+  * driver/configuration dependent. W axis only available when ABC axes are remapped to UVW.
   ** requires compatible GCode sender due to protocol extensions, new state and RT command.
   *** number of inputs and outputs supported dependent on driver implementation.
   **** supports multi turn arcs from build 20220718.
@@ -84,4 +87,4 @@ List of Supported G-Codes:
 Some [plugins](https://github.com/grblHAL/plugins) implements additional M-codes.
 
 ---
-2022-09-04
+2022-10-23

@@ -67,6 +67,7 @@ typedef union {
 typedef char ssid_t[65];
 typedef char password_t[33];
 typedef char hostname_t[33];
+typedef char sntp_server_t[129]; // URI
 
 typedef struct {
     char ip[16];
@@ -195,6 +196,5 @@ typedef struct {
 } nvs_transfer_t;
 
 extern nvs_transfer_result_t i2c_nvs_transfer (nvs_transfer_t *i2c, bool read);
-extern void my_plugin_init (void);
 
 #endif

@@ -30,7 +30,7 @@
 #include "tool_change.h"
 #include "override.h"
 #include "protocol.h"
-#include "limits.h"
+#include "machine_limits.h"
 #include "report.h"
 #include "state_machine.h"
 #include "nvs_buffer.h"
@@ -135,6 +135,7 @@ int grbl_enter (void)
     nvs_buffer_alloc(); // Allocate memory block for NVS buffer
 #endif
 
+    settings_clear();
     report_init_fns();
 
 #ifdef KINEMATICS_API

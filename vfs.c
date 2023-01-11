@@ -101,6 +101,9 @@ static char *fs_getcwd (char *buf, size_t size)
 }
 
 static const vfs_t fs_null = {
+    .mode.directory = true,
+    .mode.hidden = true,
+    .mode.read_only = true,
     .fopen = fs_open,
     .fclose = fs_close,
     .fread = fs_read,
@@ -140,23 +143,48 @@ char *vfs_fixpath (char *path)
     return path;
 }
 
-static vfs_mount_t *get_mount (const char *filename)
+static inline vfs_mount_t *path_is_mount_dir (const char *path)
+{
+    size_t plen = strlen(path);
+
+    if(*path == '/' && plen == 1)
+        return &root;
+
+    size_t mlen;
+    vfs_mount_t *mount = root.next;
+
+    if(mount) do {
+        mlen = strlen(mount->path) - 1;
+        if(mlen == plen && !strncmp(mount->path, path, mlen))
+            break;
+    } while((mount = mount->next));
+
+    return mount;
+}
+
+static vfs_mount_t *get_mount (const char *path)
 {
     vfs_errno = 0;
 
-    if(*filename == '/') {
+    if(*path != '/')
+        return cwdmount;
 
-        vfs_mount_t *mount = root.next;
+    vfs_mount_t *mount;
+
+    if((mount = path_is_mount_dir(path)) == NULL) {
+
+        mount = root.next;
 
         if(mount) do {
-            if(!strncmp(mount->path, filename, strlen(mount->path)))
+            if(!strncmp(mount->path, path, strlen(mount->path)))
                 break;
         } while((mount = mount->next));
 
-        return mount ? mount : &root;
+        if(mount == NULL)
+            mount = &root;
+    }
 
-    } else
-        return cwdmount;
+    return mount;
 }
 
 static const char *get_filename (vfs_mount_t *mount, const char *filename)
@@ -242,7 +270,7 @@ int vfs_rename (const char *from, const char *to)
 
 int vfs_unlink (const char *filename)
 {
-    vfs_mount_t *mount = get_mount(filename);
+    vfs_mount_t *mount = get_mount(filename); // TODO: test for dir?
 
     return mount ? mount->vfs->funlink(get_filename(mount, filename)) : -1;
 }
@@ -371,6 +399,9 @@ bool vfs_mount (const char *path, const vfs_t *fs)
     else if((vfs = (vfs_mount_t *)malloc(sizeof(vfs_mount_t)))) {
 
         strcpy(vfs->path, path);
+        if(vfs->path[strlen(path) - 1] != '/')
+            strcat(vfs->path, "/");
+
         vfs->vfs = fs;
         vfs->next = NULL;
 
@@ -412,19 +443,86 @@ bool vfs_unmount (const char *path)
     return true;
 }
 
-#endif
-
-/*
-struct tm *gmtime (const time_t *c_t)
+vfs_drive_t *vfs_get_drive (const char *path)
 {
-    static struct tm dummy = {
-        .tm_year = 70,
-        .tm_mon  = 0,
-        .tm_mday = 1,
-        .tm_hour = 0,
-        .tm_min  = 0
-    };
+    static vfs_drive_t drive;
 
-    return &dummy;
+    vfs_mount_t *mount = get_mount(path);
+    drive.name = mount->vfs->fs_name;
+    drive.path = (const char *)mount->path;
+    drive.mode = mount->vfs->mode;
+    drive.fs = mount->vfs;
+
+    return &drive;
 }
-*/
+
+vfs_drives_t *vfs_drives_open (void)
+{
+    vfs_drives_t *handle;
+    vfs_mount_t *mount = &root;
+
+    if((handle = malloc(sizeof(vfs_drives_t)))) {
+
+        handle->mount = NULL;
+        do {
+            if(mount->vfs->mode.hidden)
+                mount = mount->next;
+            else
+                handle->mount = mount;
+        } while(mount && handle->mount == NULL);
+
+        if(handle->mount == NULL) {
+            free(handle);
+            handle = NULL;
+        }
+    }
+
+    return handle;
+}
+
+vfs_drive_t *vfs_drives_read (vfs_drives_t *handle)
+{
+    static vfs_drive_t drive;
+
+    bool ok;
+
+    if((ok = handle->mount != NULL)) {
+
+        drive.name = handle->mount->vfs->fs_name;
+        drive.path = (const char *)handle->mount->path;
+        drive.mode = handle->mount->vfs->mode;
+        drive.fs = handle->mount->vfs;
+
+        handle->mount = handle->mount->next;
+
+        if(handle->mount) do {
+            if(!handle->mount->vfs->mode.hidden && handle->mount->vfs->fs_name)
+                break;
+        } while((handle->mount = handle->mount->next));
+    }
+
+    return ok ? &drive : NULL;
+}
+
+void vfs_drives_close (vfs_drives_t *handle)
+{
+    free(handle);
+}
+
+vfs_free_t *vfs_drive_getfree (vfs_drive_t *drive)
+{
+    static vfs_free_t free;
+
+    const vfs_t *fs = drive->fs;
+
+    return fs->fgetfree && fs->fgetfree(&free) ? &free : NULL;
+}
+
+int vfs_drive_format (vfs_drive_t *drive)
+{
+    const vfs_t *fs = drive->fs;
+
+    return fs->format ? fs->format() : -1;
+}
+
+#endif

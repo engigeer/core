@@ -609,7 +609,7 @@ status_code_t gc_execute_block(char *block)
     memset(&gc_block, 0, sizeof(gc_block));                           // Initialize the parser block struct.
     memcpy(&gc_block.modal, &gc_state.modal, sizeof(gc_state.modal)); // Copy current modes
 
-    bool set_tool = false;
+    bool set_tool = false, spindle_programmed = false;
     axis_command_t axis_command = AxisCommand_None;
     uint_fast8_t port_command = 0;
     plane_t plane;
@@ -1117,29 +1117,41 @@ status_code_t gc_execute_block(char *block)
 
                 switch(letter) {
 
-                  #ifdef A_AXIS
+#ifdef A_AXIS
+  #ifndef AXIS_REMAP_ABC2UVW
                     case 'A':
+  #else
+                    case 'U':
+  #endif
                         axis_words.a = On;
                         word_bit.parameter.a = On;
                         gc_block.values.xyz[A_AXIS] = value;
                         break;
-                  #endif
+#endif
 
-                  #ifdef B_AXIS
+#ifdef B_AXIS
+  #ifndef AXIS_REMAP_ABC2UVW
                     case 'B':
+  #else
+                    case 'V':
+  #endif
                         axis_words.b = On;
                         word_bit.parameter.b = On;
                         gc_block.values.xyz[B_AXIS] = value;
                         break;
-                  #endif
+#endif
 
-                  #ifdef C_AXIS
-                    case 'C':
+#ifdef C_AXIS
+  #ifndef AXIS_REMAP_ABC2UVW
+                  case 'C':
+  #else
+                  case 'W':
+  #endif
                         axis_words.c = On;
                         word_bit.parameter.c = On;
                         gc_block.values.xyz[C_AXIS] = value;
                         break;
-                 #endif
+#endif
 
                     case 'D':
                         word_bit.parameter.d = On;
@@ -1222,21 +1234,21 @@ status_code_t gc_execute_block(char *block)
                         gc_block.values.t = isnan(value) ? 0xFFFFFFFF : int_value;
                         break;
 
-                #ifdef U_AXIS
+#ifdef U_AXIS
                   case 'U':
                       axis_words.u = On;
                       word_bit.parameter.u = On;
                       gc_block.values.xyz[U_AXIS] = value;
                       break;
-                #endif
+#endif
 
-                #ifdef V_AXIS
+#ifdef V_AXIS
                   case 'V':
                       axis_words.v = On;
                       word_bit.parameter.v = On;
                       gc_block.values.xyz[V_AXIS] = value;
                       break;
-                #endif
+#endif
 
                   case 'X':
                         axis_words.x = On;
@@ -1424,6 +1436,8 @@ status_code_t gc_execute_block(char *block)
             gc_state.spindle.rpm = sys.spindle_rpm; // Is it correct to restore latest spindle RPM here?
         gc_state.modal.spindle_rpm_mode = gc_block.modal.spindle_rpm_mode;
     }
+
+    spindle_programmed = gc_block.words.s && !user_words.s;
 
     if (!gc_block.words.s)
         gc_block.values.s = gc_state.modal.spindle_rpm_mode == SpindleSpeedMode_RPM ? gc_state.spindle.rpm : gc_state.spindle.css.surface_speed;
@@ -2514,7 +2528,7 @@ status_code_t gc_execute_block(char *block)
         memcpy(&plan_data.spindle, &gc_state.spindle, sizeof(spindle_t));
         plan_data.condition.spindle = gc_state.modal.spindle;
         plan_data.condition.coolant = gc_state.modal.coolant;
-        plan_data.condition.is_rpm_rate_adjusted = gc_state.is_rpm_rate_adjusted;
+        plan_data.condition.is_rpm_rate_adjusted = gc_state.is_rpm_rate_adjusted || (gc_state.modal.spindle.ccw && sys.mode == Mode_Laser);
 
         if ((status_code_t)(int_value = (uint_fast16_t)mc_jog_execute(&plan_data, &gc_block)) == Status_OK)
             memcpy(gc_state.position, gc_block.values.xyz, sizeof(gc_state.position));
@@ -2543,7 +2557,7 @@ status_code_t gc_execute_block(char *block)
                 gc_parser_flags.spindle_force_sync = On;
         }
 
-        gc_state.is_rpm_rate_adjusted = gc_state.modal.spindle.ccw && !gc_parser_flags.laser_disable && hal.spindle.cap.variable;
+        gc_state.is_rpm_rate_adjusted = gc_state.modal.spindle.ccw && !gc_parser_flags.laser_disable;
     }
 
     // [0. Non-specific/common error-checks and miscellaneous setup]:
@@ -2686,9 +2700,12 @@ status_code_t gc_execute_block(char *block)
         // Update spindle control and apply spindle speed when enabling it in this block.
         // NOTE: All spindle state changes are synced, even in laser mode. Also, plan_data,
         // rather than gc_state, is used to manage laser state for non-laser motions.
-        if(spindle_sync(0, gc_block.modal.spindle, plan_data.spindle.rpm))
+        if((spindle_programmed = spindle_sync(0, gc_block.modal.spindle, plan_data.spindle.rpm)))
             gc_state.modal.spindle = gc_block.modal.spindle;
     }
+
+    if(spindle_programmed && grbl.on_spindle_programmed)
+        grbl.on_spindle_programmed(gc_state.modal.spindle, gc_state.spindle.rpm, gc_state.modal.spindle_rpm_mode);
 
 // TODO: Recheck spindle running in CCS mode (is_rpm_pos_adjusted = On)?
 
@@ -3059,7 +3076,8 @@ status_code_t gc_execute_block(char *block)
             gc_state.modal.feed_mode = FeedMode_UnitsPerMin;
 // TODO: check           gc_state.distance_per_rev = 0.0f;
             // gc_state.modal.cutter_comp = CUTTER_COMP_DISABLE; // Not supported.
-            gc_state.modal.coord_system.id = CoordinateSystem_G54;
+            if((sys.report.gwco = gc_state.modal.coord_system.id != CoordinateSystem_G54))
+                gc_state.modal.coord_system.id = CoordinateSystem_G54;
             gc_state.modal.spindle = (spindle_state_t){0};
             gc_state.modal.coolant = (coolant_state_t){0};
             gc_state.modal.override_ctrl.feed_rate_disable = Off;

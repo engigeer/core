@@ -144,17 +144,21 @@
 #endif
 
 #ifndef TRINAMIC_ENABLE
-#define TRINAMIC_ENABLE      0
+  #define TRINAMIC_ENABLE   0
 #endif
 #if TRINAMIC_ENABLE == 2209
-#define TRINAMIC_UART_ENABLE 1
+  #if !defined(TRINAMIC_UART_ENABLE)
+    #define TRINAMIC_UART_ENABLE 1
+  #endif
 #else
-#define TRINAMIC_UART_ENABLE 0
+  #define TRINAMIC_UART_ENABLE 0
 #endif
-#if TRINAMIC_ENABLE == 2130 || TRINAMIC_ENABLE == 5160
-#define TRINAMIC_SPI_ENABLE  1
+#if (TRINAMIC_ENABLE == 2130 || TRINAMIC_ENABLE == 5160)
+  #if !defined(TRINAMIC_SPI_ENABLE)
+    #define TRINAMIC_SPI_ENABLE  1
+  #endif
 #else
-#define TRINAMIC_SPI_ENABLE  0
+  #define TRINAMIC_SPI_ENABLE  0
 #endif
 #ifndef TRINAMIC_I2C
 #define TRINAMIC_I2C        0
@@ -170,6 +174,10 @@
 
 #ifndef SDCARD_ENABLE
 #define SDCARD_ENABLE       0
+#endif
+
+#ifndef LITTLEFS_ENABLE
+#define LITTLEFS_ENABLE     0
 #endif
 
 #ifndef SPI_ENABLE
@@ -312,6 +320,12 @@
 #undef FTP_ENABLE
 #define FTP_ENABLE          0
 #endif
+#ifndef MDNS_ENABLE
+#define MDNS_ENABLE             0
+#endif
+#ifndef SSDP_ENABLE
+#define SSDP_ENABLE             0
+#endif
 
 #if ETHERNET_ENABLE || WIFI_ENABLE
 #ifndef NETWORK_HOSTNAME
@@ -353,25 +367,25 @@
 #endif
 #if WIFI_SOFTAP > 0
 #ifndef NETWORK_AP_SSID
-#define NETWORK_AP_SSID            "grblHAL_AP"
+#define NETWORK_AP_SSID         "grblHAL_AP"
 #endif
 #ifndef NETWORK_AP_PASSWORD
-#define NETWORK_AP_PASSWORD        "grblHAL"
+#define NETWORK_AP_PASSWORD     "grblHAL"
 #endif
 #ifndef NETWORK_AP_HOSTNAME
-#define NETWORK_AP_HOSTNAME        "grblHAL_AP"
+#define NETWORK_AP_HOSTNAME     "grblHAL_AP"
 #endif
 #ifndef NETWORK_AP_IPMODE
-#define NETWORK_AP_IPMODE          0 // 0 = static, 1 = DHCP, 2 = AutoIP
+#define NETWORK_AP_IPMODE       0 // static
 #endif
 #ifndef NETWORK_AP_IP
-#define NETWORK_AP_IP              "192.168.5.1"
+#define NETWORK_AP_IP           "192.168.5.1"
 #endif
-#ifndef NETWORK_AP_GATEWAYs
-#define NETWORK_AP_GATEWAY         "192.168.5.1"
+#ifndef NETWORK_AP_GATEWAY
+#define NETWORK_AP_GATEWAY      "192.168.5.1"
 #endif
 #ifndef NETWORK_AP_MASK
-#define NETWORK_AP_MASK            "255.255.255.0"
+#define NETWORK_AP_MASK         "255.255.255.0"
 #endif
 #endif
 #endif

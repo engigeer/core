@@ -197,6 +197,11 @@ typedef enum {
 
     Setting_AdminPassword = 330,
     Setting_UserPassword = 331,
+    Setting_NTPServerURI = 332,
+    Setting_NTPServerURI_2 = 333,
+    Setting_NTPServerURI_3 = 334,
+    Setting_Timezone = 335,
+    Setting_DSTActive = 336,
 
     Setting_TrinamicDriver = 338,
     Setting_TrinamicHoming = 339,
@@ -207,6 +212,7 @@ typedef enum {
     Setting_ToolChangeFeedRate = 343,
     Setting_ToolChangeSeekRate = 344,
     Setting_ToolChangePulloffRate = 345,
+    Setting_ToolChangeRestorePosition = 346,
 
     Setting_DualAxisLengthFailPercent = 347,
     Setting_DualAxisLengthFailMin = 348,
@@ -259,6 +265,10 @@ typedef enum {
     Setting_DoorCoolantOnDelay = 393,
     Setting_SpindleOnDelay = 394, // made available if safety door input not provided
     Setting_SpindleType = 395,
+    Setting_WebUiTimeout = 396,
+    Setting_WebUiAutoReportInterval = 397,
+    Setting_PlannerBlocks = 398,
+    Setting_CANbus_BaudRate = 399,
 
     Setting_EncoderSettingsBase = 400, // NOTE: Reserving settings values >= 400 for encoder settings. Up to 449.
     Setting_EncoderSettingsMax = 449,
@@ -289,6 +299,8 @@ typedef enum {
     Setting_VFD_19 = 471,
     Setting_VFD_20 = 472,
     Setting_VFD_21 = 473,
+
+    Setting_Fan0OffDelay = 480,
 
     Setting_SettingsMax,
     Setting_SettingsAll = Setting_SettingsMax,
@@ -344,7 +356,7 @@ typedef union {
     struct {
         uint16_t report_inches                   :1,
                  restore_overrides               :1,
-                 unused0                         :1,
+                 dst_active                      :1, // Daylight savings time
                  sleep_enable                    :1,
                  disable_laser_during_hold       :1,
                  force_initialization_alarm      :1,
@@ -353,7 +365,8 @@ typedef union {
                  unused1                         :1,
                  g92_is_volatile                 :1,
                  compatibility_level             :4,
-                 unassigned                      :2;
+                 no_restore_position_after_M6         :1,
+                 unassigned                      :1;
     };
 } settingflags_t;
 
@@ -585,6 +598,9 @@ typedef struct {
     float junction_deviation;
     float arc_tolerance;
     float g73_retract;
+#ifdef BLOCK_BUFFER_DYNAMIC
+    uint16_t planner_buffer_blocks;
+#endif
     machine_mode_t mode;
     tool_change_settings_t tool_change;
     axis_settings_t axis[N_AXIS];
@@ -635,6 +651,7 @@ typedef enum {
     Group_Stepper,
     Group_MotorDriver,
     Group_VFD,
+    Group_CANbus,
     Group_Axis,
 // NOTE: axis groups MUST be sequential AND last
     Group_Axis0,
@@ -697,6 +714,15 @@ typedef union {
     float fvalue;
 } setting_limit_t;
 
+typedef union {
+    uint8_t value;
+    struct {
+        uint8_t reboot_required :1,
+                allow_null: 1,
+                unused :6;
+    };
+} setting_detail_flags_t;
+
 typedef struct setting_detail {
     setting_id_t id;
     setting_group_t group;
@@ -710,7 +736,7 @@ typedef struct setting_detail {
     void *value;
     void *get_value;
     bool (*is_available)(const struct setting_detail *setting);
-    bool reboot_required;
+    setting_detail_flags_t flags;
 } setting_detail_t;
 
 typedef struct {
@@ -756,6 +782,9 @@ typedef struct setting_details {
 typedef setting_details_t *(*on_get_settings_ptr)(void);
 
 extern settings_t settings;
+
+// Clear settings chain (unlinks plugin/driver settings from core settings)
+void settings_clear (void);
 
 // Initialize the configuration subsystem (load settings from persistent storage)
 void settings_init();
@@ -806,8 +835,11 @@ setting_datatype_t setting_datatype_to_external (setting_datatype_t datatype);
 setting_group_t settings_normalize_group (setting_group_t group);
 const setting_group_detail_t *setting_get_group_details (setting_group_t id);
 char *setting_get_value (const setting_detail_t *setting, uint_fast16_t offset);
+uint32_t setting_get_int_value (const setting_detail_t *setting, uint_fast16_t offset);
+float setting_get_float_value (const setting_detail_t *setting, uint_fast16_t offset);
 setting_id_t settings_get_axis_base (setting_id_t id, uint_fast8_t *idx);
 bool setting_is_list (const setting_detail_t *setting);
+bool setting_is_integer (const setting_detail_t *setting);
 void setting_remove_elements (setting_id_t id, uint32_t mask);
 bool settings_add_spindle_type (const char *type);
 

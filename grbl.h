@@ -23,6 +23,10 @@
 #ifndef _GRBL_H_
 #define _GRBL_H_
 
+#ifdef __SAM3X8E__
+#define _WIRING_CONSTANTS_ // for shutting up compiler warnings due to bad framework code for Arduino Due
+#endif
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -34,7 +38,9 @@
 #else
 #define GRBL_VERSION "1.1f"
 #endif
-#define GRBL_BUILD 20220904
+#define GRBL_BUILD 20221115
+
+#define GRBL_URL "https://github.com/grblHAL"
 
 // The following symbols are set here if not already set by the compiler or in config.h
 // Do NOT change here!

@@ -75,6 +75,14 @@ typedef enum {
     SpindleData_AngularPosition //!< 2
 } spindle_data_request_t;
 
+typedef enum {
+    SpindleType_PWM,        //!< 0
+    SpindleType_Basic,      //!< 1 - on/off + optional direction
+    SpindleType_VFD,        //!< 2
+    SpindleType_Solenoid,   //!< 3
+    SpindleType_Null,       //!< 4
+} spindle_type_t;
+
 /*! \brief Pointer to function for configuring the spindle.
 \returns state in a \a spindle_state_t union variable.
 */
@@ -134,7 +142,9 @@ typedef void (*spindle_pulse_on_ptr)(uint_fast16_t pulse_length);
 
 //! Handlers for spindle support.
 typedef struct {
+    spindle_type_t type;                //!< Spindle type.
     spindle_cap_t cap;                  //!< Spindle capabilities.
+    uint_fast16_t pwm_off_value;        //!< Value for switching PWM signal off.
     float rpm_min;                      //!< Minimum spindle RPM.
     float rpm_max;                      //!< Maximum spindle RPM.
     spindle_config_ptr config;          //!< Optional handler for configuring the spindle.
@@ -219,7 +229,13 @@ uint8_t spindle_get_count (void);
 
 bool spindle_select (spindle_id_t spindle_id);
 spindle_cap_t spindle_get_caps (void);
-void spindle_update_caps (bool laser_cap);
+
+/*! \brief Update PWM spindle capabilities with run-time determined parameters.
+\param pwm_caps pointer to \a spindle_pwm_t struct, NULL if spindle if not PWM capable.
+
+ */
+void spindle_update_caps (spindle_pwm_t *pwm_caps);
+
 spindle_id_t spindle_get_current (void);
 
 #endif

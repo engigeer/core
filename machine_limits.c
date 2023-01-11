@@ -1,5 +1,5 @@
 /*
-  limits.c - code pertaining to limit-switches and performing the homing cycle
+  machine_limits.c - code pertaining to limit-switches and performing the homing cycle
 
   Part of grblHAL
 
@@ -29,7 +29,7 @@
 #include "nuts_bolts.h"
 #include "protocol.h"
 #include "motion_control.h"
-#include "limits.h"
+#include "machine_limits.h"
 #include "tool_change.h"
 #include "state_machine.h"
 #ifdef KINEMATICS_API
@@ -272,13 +272,22 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
         step_pin[idx] = bit(idx);
 #endif
         // Set target based on max_travel setting. Ensure homing switches engaged with search scalar.
-        // NOTE: settings.max_travel[] is stored as a negative value.
-        if (bit_istrue(cycle.mask, bit(idx))) {
-            max_travel = max(max_travel,(-HOMING_AXIS_SEARCH_SCALAR) * settings.axis[idx].max_travel);
+        // NOTE: settings.axis[].max_travel is stored as a negative value.
+        if(bit_istrue(cycle.mask, bit(idx))) {
+#if N_AXIS > 3
+            if(bit_istrue(settings.steppers.is_rotational.mask, bit(idx)))
+                max_travel = max(max_travel, (-HOMING_AXIS_SEARCH_SCALAR) * (settings.axis[idx].max_travel < -0.0f ? settings.axis[idx].max_travel : -360.0f));
+            else
+#endif
+            max_travel = max(max_travel, (-HOMING_AXIS_SEARCH_SCALAR) * settings.axis[idx].max_travel);
+
             if(bit_istrue(auto_square.mask, bit(idx)))
                 dual_motor_axis = idx;
         }
     } while(idx);
+
+    if(max_travel == 0.0f)
+        return true;
 
     if(auto_square.mask) {
         float fail_distance = (-settings.homing.dual_axis.fail_length_percent / 100.0f) * settings.axis[dual_motor_axis].max_travel;
@@ -480,10 +489,8 @@ static bool limits_homing_cycle (axes_signals_t cycle, axes_signals_t auto_squar
 
 // Perform homing cycle(s) according to configuration.
 // NOTE: only one auto squared axis can be homed at a time.
-bool limits_go_home (axes_signals_t cycle)
+status_code_t limits_go_home (axes_signals_t cycle)
 {
-    bool homed = false;
-
     axes_signals_t auto_square = {0}, auto_squared = {0};
 
     if(hal.stepper.get_ganged)
@@ -494,24 +501,22 @@ bool limits_go_home (axes_signals_t cycle)
     if(auto_squared.mask) {
 
         if(!hal.stepper.disable_motors)
-            return false; // Bad driver!
+            return Status_IllegalHomingConfiguration; // Bad driver! - should not happen.
 
         auto_square.x = On;
         while(!(auto_squared.mask & auto_square.mask))
             auto_square.mask <<= 1;
 
         if(auto_squared.mask != auto_square.mask)
-            return false; // Attempt at squaring more than one auto squared axis at the same time.
+            return Status_IllegalHomingConfiguration; // Attempt at squaring more than one auto squared axis at the same time.
 
         if((auto_squared.mask & homing_signals_select(hal.homing.get_state(), (axes_signals_t){0}, SquaringMode_Both).mask) && !limits_pull_off(auto_square, settings.homing.pulloff * HOMING_AXIS_LOCATE_SCALAR))
-            return false; // Auto squaring with limit switch asserted is not allowed.
+            return Status_LimitsEngaged; // Auto squaring with limit switch asserted is not allowed.
     }
 
     tc_clear_tlo_reference(cycle);
 
-    homed = limits_homing_cycle(cycle, auto_square);
-
-    return homed;
+    return limits_homing_cycle(cycle, auto_square) ? Status_OK : Status_Unhandled;
 }
 
 // Performs a soft limit check. Called from mc_line() only. Assumes the machine has been homed,
