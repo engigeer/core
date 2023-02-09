@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020-2022 Terje Io
+  Copyright (c) 2020-2023 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -32,6 +32,16 @@
 #include "settings.h"
 #include "report.h"
 #include "planner.h"
+#include "machine_limits.h"
+
+typedef enum {
+    OverrideChanged_FeedRate = 0,
+    OverrideChanged_RapidRate = 0,
+    OverrideChanged_SpindleRPM = 0,
+    OverrideChanged_SpindleState = 0,
+    OverrideChanged_CoolantState = 0,
+    OverrideChanged_FanState = 0
+} override_changed_t;
 
 /* TODO: add to grbl pointers so that a different formatting (xml, json etc) of reports may be implemented by driver?
 typedef struct {
@@ -68,6 +78,7 @@ typedef bool (*enqueue_gcode_ptr)(char *data);
 typedef bool (*protocol_enqueue_realtime_command_ptr)(char c);
 
 typedef void (*on_state_change_ptr)(sys_state_t state);
+typedef void (*on_override_changed_ptr)(override_changed_t override);
 typedef void (*on_spindle_programmed_ptr)(spindle_state_t spindle, float rpm, spindle_rpm_mode_t mode);
 typedef void (*on_program_completed_ptr)(program_flow_t program_flow, bool check_mode);
 typedef void (*on_execute_realtime_ptr)(sys_state_t state);
@@ -81,7 +92,7 @@ typedef void (*on_realtime_report_ptr)(stream_write_ptr stream_write, report_tra
 typedef void (*on_unknown_feedback_message_ptr)(stream_write_ptr stream_write);
 typedef void (*on_stream_changed_ptr)(stream_type_t type);
 typedef bool (*on_laser_ppi_enable_ptr)(uint_fast16_t ppi, uint_fast16_t pulse_length);
-typedef void (*on_homing_rate_set_ptr)(axes_signals_t axes, float rate, bool pulloff);
+typedef void (*on_homing_rate_set_ptr)(axes_signals_t axes, float rate, homing_mode_t mode);
 typedef void (*on_homing_completed_ptr)(void);
 typedef bool (*on_probe_fixture_ptr)(tool_data_t *tool, bool at_g59_3, bool on);
 typedef bool (*on_probe_start_ptr)(axes_signals_t axes, float *target, plan_line_data_t *pl_data);
@@ -99,6 +110,7 @@ typedef struct {
     report_t report;
     // grbl core events - may be subscribed to by drivers or by the core.
     on_state_change_ptr on_state_change;
+    on_override_changed_ptr on_override_changed;
     on_report_handlers_init_ptr on_report_handlers_init;
     on_spindle_programmed_ptr on_spindle_programmed;
     on_program_completed_ptr on_program_completed;
