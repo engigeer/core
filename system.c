@@ -56,6 +56,7 @@ static status_code_t toggle_optional_stop (sys_state_t state, char *args);
 static status_code_t check_mode (sys_state_t state, char *args);
 static status_code_t disable_lock (sys_state_t state, char *args);
 static status_code_t output_help (sys_state_t state, char *args);
+static status_code_t output_spindles (sys_state_t state, char *args);
 static status_code_t home (sys_state_t state, char *args);
 static status_code_t home_x (sys_state_t state, char *args);
 static status_code_t home_y (sys_state_t state, char *args);
@@ -120,8 +121,8 @@ ISR_CODE void ISR_FUNC(control_interrupt_handler)(control_signals_t signals)
                     // NOTE: at least for lasers there should be an external interlock blocking laser power.
                     if(state_get() != STATE_IDLE && state_get() != STATE_JOG)
                         system_set_exec_state_flag(EXEC_SAFETY_DOOR);
-                    if(sys.mode == Mode_Laser) // Turn off spindle immediately (laser) when in laser mode
-                        hal.spindle.set_state((spindle_state_t){0}, 0.0f);
+                    if(settings.mode == Mode_Laser) // Turn off spindle immediately (laser) when in laser mode
+                        spindle_all_off();
                 } else
                     system_set_exec_state_flag(EXEC_SAFETY_DOOR);
             }
@@ -166,10 +167,12 @@ void system_execute_startup (void)
 // Reset spindle encoder data
 status_code_t spindle_reset_data (sys_state_t state, char *args)
 {
-    if(hal.spindle.reset_data)
-        hal.spindle.reset_data();
+    spindle_ptrs_t *spindle = gc_spindle_get();
 
-    return hal.spindle.reset_data ? Status_OK : Status_InvalidStatement;
+    if(spindle->reset_data)
+        spindle->reset_data();
+
+    return spindle->reset_data ? Status_OK : Status_InvalidStatement;
 }
 
 status_code_t read_int (char *s, int32_t *value)
@@ -188,78 +191,79 @@ status_code_t read_int (char *s, int32_t *value)
 }
 
 PROGMEM static const sys_command_t sys_commands[] = {
-    { "G", true, output_parser_state },
-    { "J", false, jog },
-    { "#", false, output_ngc_parameters },
-    { "$", false, output_settings },
-    { "+", false, output_all_settings },
+    { "G", output_parser_state, { .noargs = On, .allow_blocking = On } },
+    { "J", jog },
+    { "#", output_ngc_parameters, { .allow_blocking = On } },
+    { "$", output_settings, { .allow_blocking = On } },
+    { "+", output_all_settings, { .allow_blocking = On } },
 #ifndef NO_SETTINGS_DESCRIPTIONS
-    { "SED", false, output_setting_description },
+    { "SED", output_setting_description, { .allow_blocking = On } },
 #endif
-    { "B", true, toggle_block_delete },
-    { "S", true, toggle_single_block },
-    { "O", true, toggle_optional_stop },
-    { "C", true, check_mode },
-    { "X", false, disable_lock },
-    { "H", false, home },
-    { "HX", false, home_x },
-    { "HY", false, home_y },
-    { "HZ", false, home_z },
+    { "B", toggle_block_delete, { .noargs = On } },
+    { "S", toggle_single_block, { .noargs = On } },
+    { "O", toggle_optional_stop, { .noargs = On } },
+    { "C", check_mode, { .noargs = On } },
+    { "X", disable_lock },
+    { "H", home },
+    { "HX", home_x },
+    { "HY", home_y },
+    { "HZ", home_z },
 #if AXIS_REMAP_ABC2UVW
   #ifdef A_AXIS
-    { "HU", false, home_a },
+    { "HU", home_a },
   #endif
   #ifdef B_AXIS
-    { "HV", false, home_b },
+    { "HV", home_b },
   #endif
   #ifdef C_AXIS
-    { "HW", false, home_c },
+    { "HW", home_c },
   #endif
 #else
   #ifdef A_AXIS
-    { "HA", false, home_a },
+    { "HA", home_a },
   #endif
   #ifdef B_AXIS
-    { "HB", false, home_b },
+    { "HB", home_b },
   #endif
   #ifdef C_AXIS
-    { "HC", false, home_c },
+    { "HC", home_c },
   #endif
 #endif
 #ifdef U_AXIS
-    { "HU", false, home_u },
+    { "HU", home_u },
 #endif
 #ifdef V_AXIS
-    { "HV", false, home_v },
+    { "HV", home_v },
 #endif
-    { "HELP", false, output_help },
-    { "SLP", true, enter_sleep },
-    { "TLR", true, set_tool_reference },
-    { "TPW", true, tool_probe_workpiece },
-    { "I", false, build_info },
-    { "I+", true, output_all_build_info },
-    { "RST", false, settings_reset },
-    { "N", true, output_startup_lines },
-    { "N0", false, set_startup_line0 },
-    { "N1", false, set_startup_line1 },
-    { "EA", true, enumerate_alarms },
-    { "EAG", true, enumerate_alarms_grblformatted },
-    { "EE", true, enumerate_errors },
-    { "EEG", true, enumerate_errors_grblformatted },
-    { "EG", true, enumerate_groups },
-    { "ES", true, enumerate_settings },
-    { "ESG", true, enumerate_settings_grblformatted },
-    { "ESH", true, enumerate_settings_halformatted },
-    { "E*", true, enumerate_all },
-    { "PINS", true, enumerate_pins },
-    { "RST", false, settings_reset },
-    { "LEV", true, report_last_signals_event },
-    { "LIM", true, report_current_limit_state },
-    { "SD", false, report_spindle_data },
-    { "SR", false, spindle_reset_data },
-    { "RTC", false, rtc_action },
+    { "HELP", output_help, { .allow_blocking = On } },
+    { "SPINDLES", output_spindles },
+    { "SLP", enter_sleep, { .noargs = On } },
+    { "TLR", set_tool_reference, { .noargs = On } },
+    { "TPW", tool_probe_workpiece, { .noargs = On } },
+    { "I", build_info, { .allow_blocking = On } },
+    { "I+", output_all_build_info, { .noargs = On, .allow_blocking = On } },
+    { "RST", settings_reset, { .allow_blocking = On } },
+    { "N", output_startup_lines, { .noargs = On, .allow_blocking = On } },
+    { "N0", set_startup_line0 },
+    { "N1", set_startup_line1 },
+    { "EA", enumerate_alarms, { .noargs = On, .allow_blocking = On } },
+    { "EAG", enumerate_alarms_grblformatted, { .noargs = On, .allow_blocking = On } },
+    { "EE", enumerate_errors, { .noargs = On, .allow_blocking = On } },
+    { "EEG", enumerate_errors_grblformatted, { .noargs = On, .allow_blocking = On } },
+    { "EG", enumerate_groups, { .noargs = On, .allow_blocking = On } },
+    { "ES", enumerate_settings, { .noargs = On, .allow_blocking = On } },
+    { "ESG", enumerate_settings_grblformatted, { .noargs = On, .allow_blocking = On } },
+    { "ESH", enumerate_settings_halformatted, { .noargs = On, .allow_blocking = On } },
+    { "E*", enumerate_all, { .noargs = On, .allow_blocking = On } },
+    { "PINS", enumerate_pins, { .noargs = On, .allow_blocking = On } },
+    { "RST", settings_reset, { .allow_blocking = On } },
+    { "LEV", report_last_signals_event, { .noargs = On, .allow_blocking = On } },
+    { "LIM", report_current_limit_state, { .noargs = On, .allow_blocking = On } },
+    { "SD", report_spindle_data },
+    { "SR", spindle_reset_data },
+    { "RTC", rtc_action, { .allow_blocking = On } },
 #ifdef DEBUGOUT
-    { "Q", true, output_memmap },
+    { "Q", output_memmap, { .noargs = On } },
 #endif
 };
 
@@ -284,6 +288,7 @@ void system_command_help (void)
     hal.stream.write("$SLP - enter sleep mode" ASCII_EOL);
     hal.stream.write("$HELP - output help topics" ASCII_EOL);
     hal.stream.write("$HELP <topic> - output help for <topic>" ASCII_EOL);
+    hal.stream.write("$SPINDLES - output spindle list" ASCII_EOL);
     hal.stream.write("$RST=* - restore/reset all settings" ASCII_EOL);
     hal.stream.write("$RST=$ - restore default settings" ASCII_EOL);
     if(settings_get_details()->next)
@@ -293,10 +298,13 @@ void system_command_help (void)
 #else
     hal.stream.write("$RST=# - reset offsets" ASCII_EOL);
 #endif
-    if(hal.spindle.reset_data)
+
+    spindle_ptrs_t *spindle = gc_spindle_get();
+    if(spindle->reset_data)
         hal.stream.write("$SR - reset spindle encoder data" ASCII_EOL);
-    if(hal.spindle.get_data)
+    if(spindle->get_data)
         hal.stream.write("$SD - output spindle encoder data" ASCII_EOL);
+
     hal.stream.write("$TLR - set tool offset reference" ASCII_EOL);
     hal.stream.write("$TPW - probe tool plate" ASCII_EOL);
     hal.stream.write("$EA - enumerate alarms" ASCII_EOL);
@@ -333,7 +341,7 @@ void system_command_help (void)
 status_code_t system_execute_line (char *line)
 {
     if(line[1] == '\0') {
-        report_grbl_help();
+        grbl.report.help_message();
         return Status_OK;
     }
 
@@ -374,7 +382,10 @@ status_code_t system_execute_line (char *line)
     do {
         for(idx = 0; idx < cmd->n_commands; idx++) {
             if(!strcmp(line, cmd->commands[idx].command)) {
-                if(!cmd->commands[idx].noargs || args == NULL) {
+                if(sys.blocking_event && !cmd->commands[idx].flags.allow_blocking) {
+                    retval = Status_NotAllowedCriticalEvent;
+                    break;
+                } else if(!cmd->commands[idx].flags.noargs || args == NULL) {
                     if((retval = cmd->commands[idx].execute(state_get(), args)) != Status_Unhandled)
                         break;
                 }
@@ -541,7 +552,7 @@ static status_code_t output_all_settings (sys_state_t state, char *args)
 static status_code_t output_parser_state (sys_state_t state, char *args)
 {
     report_gcode_modes();
-    sys.report.homed = On; // Report homed state on next realtime report
+    system_add_rt_report(Report_Homed); // Report homed state on next realtime report
 
     return Status_OK;
 }
@@ -626,6 +637,11 @@ static status_code_t output_help (sys_state_t state, char *args)
     return report_help(args);
 }
 
+static status_code_t output_spindles (sys_state_t state, char *args)
+{
+    return report_spindles();
+}
+
 static status_code_t go_home (sys_state_t state, axes_signals_t axes)
 {
     if(axes.mask && !settings.homing.flags.single_axis_commands)
@@ -661,7 +677,7 @@ static status_code_t go_home (sys_state_t state, axes_signals_t axes)
     if (retval == Status_OK && !sys.abort) {
         state_set(STATE_IDLE);  // Set to IDLE when complete.
         st_go_idle();           // Set steppers to the settings idle state before returning.
-        report_feedback_message(Message_None);
+        grbl.report.feedback_message(Message_None);
         // Execute startup scripts after successful homing.
         if (sys.homing.mask && (sys.homing.mask & sys.homed.mask) == sys.homing.mask)
             system_execute_startup();
@@ -759,7 +775,7 @@ static status_code_t set_tool_reference (sys_state_t state, char *args)
     } else
         sys.tlo_reference_set.mask = 0;
 #endif
-    sys.report.tlo_reference = On;
+    system_add_rt_report(Report_TLOReference);
 
     return Status_OK;
 }
@@ -788,7 +804,7 @@ static status_code_t output_ngc_parameters (sys_state_t state, char *args)
 
 static status_code_t build_info (sys_state_t state, char *args)
 {
-    if (!(state == STATE_IDLE || (state & (STATE_ALARM|STATE_ESTOP|STATE_CHECK_MODE))))
+    if (!(state == STATE_IDLE || (state & (STATE_ALARM|STATE_ESTOP|STATE_SLEEP|STATE_CHECK_MODE))))
         return Status_IdleError;
 
     if (args == NULL) {
@@ -952,7 +968,10 @@ void system_flag_wco_change (void)
     if(!settings.status_report.sync_on_wco_change)
         protocol_buffer_synchronize();
 
-    sys.report.wco = On;
+    if(grbl.on_wco_changed)
+        grbl.on_wco_changed();
+
+    system_add_rt_report(Report_WCO);
 }
 
 // Sets machine position. Must be sent a 'step' array.
@@ -987,62 +1006,30 @@ bool system_xy_at_fixture (coord_system_id_t id, float tolerance)
     return ok;
 }
 
-
 // Checks and reports if target array exceeds machine travel limits. Returns false if check failed.
-// NOTE: max_travel is stored as negative
-// TODO: only check homed axes?
 bool system_check_travel_limits (float *target)
 {
     bool failed = false;
     uint_fast8_t idx = N_AXIS;
 
-    if(settings.homing.flags.force_set_origin) {
-        do {
-            idx--;
-        // When homing forced set origin is enabled, soft limits checks need to account for directionality.
-            failed = settings.axis[idx].max_travel < -0.0f &&
-                      (bit_istrue(settings.homing.dir_mask.value, bit(idx))
-                        ? (target[idx] < 0.0f || target[idx] > -settings.axis[idx].max_travel)
-                        : (target[idx] > 0.0f || target[idx] < settings.axis[idx].max_travel));
-        } while(!failed && idx);
-    } else do {
+    if(sys.homed.mask) do {
         idx--;
-        failed = settings.axis[idx].max_travel < -0.0f && (target[idx] > 0.0f || target[idx] < settings.axis[idx].max_travel);
+        if(bit_istrue(sys.homed.mask, bit(idx)) && settings.axis[idx].max_travel < -0.0f)
+            failed = target[idx] < sys.work_envelope.min[idx] || target[idx] > sys.work_envelope.max[idx];
     } while(!failed && idx);
 
     return !failed;
 }
 
 // Limits jog commands to be within machine limits, homed axes only.
-// When hard limits are enabled pulloff distance is subtracted to avoid triggering limit switches.
-// NOTE: max_travel is stored as negative
 void system_apply_jog_limits (float *target)
 {
     uint_fast8_t idx = N_AXIS;
 
     if(sys.homed.mask) do {
         idx--;
-        float pulloff = settings.limits.flags.hard_enabled && bit_istrue(sys.homing.mask, bit(idx)) ? settings.homing.pulloff : 0.0f;
-        if(bit_istrue(sys.homed.mask, bit(idx)) && settings.axis[idx].max_travel < -0.0f) {
-            if(settings.homing.flags.force_set_origin) {
-                if(bit_isfalse(settings.homing.dir_mask.value, bit(idx))) {
-                    if(target[idx] > 0.0f)
-                        target[idx] = 0.0f;
-                    else if(target[idx] < (settings.axis[idx].max_travel + pulloff))
-                        target[idx] = (settings.axis[idx].max_travel + pulloff);
-                } else {
-                    if(target[idx] < 0.0f)
-                        target[idx] = 0.0f;
-                    else if(target[idx] > -(settings.axis[idx].max_travel + pulloff))
-                        target[idx] = -(settings.axis[idx].max_travel + pulloff);
-                }
-            } else {
-                if(target[idx] > -pulloff)
-                    target[idx] = -pulloff;
-                else if(target[idx] < (settings.axis[idx].max_travel + pulloff))
-                    target[idx] = (settings.axis[idx].max_travel + pulloff);
-            }
-        }
+        if(bit_istrue(sys.homed.mask, bit(idx)) && settings.axis[idx].max_travel < -0.0f)
+            target[idx] = max(min(target[idx], sys.work_envelope.max[idx]), sys.work_envelope.min[idx]);
     } while(idx);
 }
 
@@ -1054,6 +1041,24 @@ void system_raise_alarm (alarm_code_t alarm)
         sys.alarm = alarm;
         state_set(alarm == Alarm_EStop ? STATE_ESTOP : STATE_ALARM);
         if(sys.driver_started || sys.alarm == Alarm_SelftestFailed)
-            report_alarm_message(alarm);
+            grbl.report.alarm_message(alarm);
     }
+}
+
+// TODO: encapsulate sys.report
+
+report_tracking_flags_t system_get_rt_report_flags (void)
+{
+    return sys.report;
+}
+
+void system_add_rt_report (report_tracking_t report)
+{
+    if(report == Report_ClearAll)
+        sys.report.value = 0;
+    else
+        sys.report.value |= (uint32_t)report;
+
+    if(sys.report.value && grbl.on_rt_reports_added)
+        grbl.on_rt_reports_added((report_tracking_flags_t)((uint32_t)report));
 }

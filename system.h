@@ -164,6 +164,28 @@ typedef struct {
 
 #endif
 
+typedef enum {
+    Report_ClearAll = 0,
+    Report_MPGMode = (1 << 0),
+    Report_Scaling = (1 << 1),
+    Report_Homed   = (1 << 2),
+    Report_LatheXMode = (1 << 3),
+    Report_Spindle = (1 << 4),
+    Report_Coolant = (1 << 5),
+    Report_Overrides = (1 << 6),
+    Report_Tool = (1 << 7),
+    Report_WCO = (1 << 8),
+    Report_GWCO = (1 << 9),
+    Report_ToolOffset = (1 << 10),
+    Report_M66Result = (1 << 11),
+    Report_PWM = (1 << 12),
+    Report_Motor = (1 << 13),
+    Report_Encoder = (1 << 14),
+    Report_TLOReference = (1 << 15),
+    Report_Fan = (1 << 16),
+    Report_All = 0x8001FFFF
+} report_tracking_t;
+
 typedef union {
     uint32_t value;
     struct {
@@ -190,36 +212,49 @@ typedef union {
 } report_tracking_flags_t;
 
 typedef struct {
-    uint8_t feed_rate;              //!< Feed rate override value in percent
-    uint8_t rapid_rate;             //!< Rapids override value in percent
-    uint8_t spindle_rpm;            //!< Spindle speed override value in percent
+    override_t feed_rate;           //!< Feed rate override value in percent
+    override_t rapid_rate;          //!< Rapids override value in percent
+    override_t spindle_rpm;         //!< __NOTE:_ Not used by the core, it maintain per spindle override in \ref spindle_param_t
     spindle_stop_t spindle_stop;    //!< Tracks spindle stop override states
     gc_override_flags_t control;    //!< Tracks override control states.
 } overrides_t;
 
 typedef union {
+    uint8_t flags;
+    struct {
+        uint8_t feedrate :1,
+                coolant  :1,
+                spindle  :1,
+                unused   :5;
+    };
+} system_override_delay_t;
+
+typedef union {
     uint16_t value;
     struct {
-        uint16_t mpg_mode              :1, //!< MPG mode flag. Set when switched to secondary input stream. (unused for now).
-                 probe_succeeded       :1, //!< Tracks if last probing cycle was successful.
-                 soft_limit            :1, //!< Tracks soft limit errors for the state machine.
-                 exit                  :1, //!< System exit flag. Used in combination with abort to terminate main loop.
-                 block_delete_enabled  :1, //!< Set to true to enable block delete.
-                 feed_hold_pending     :1,
-                 delay_overrides       :1,
-                 optional_stop_disable :1,
-                 single_block          :1, //!< Set to true to disable M1 (optional stop), via realtime command.
-                 keep_input            :1, //!< Set to true to not flush stream input buffer on executing STOP.
-                 auto_reporting        :1, //!< Set to true when auto real time reporting is enabled.
-                 unused                :5;
+        uint16_t mpg_mode                :1, //!< MPG mode flag. Set when switched to secondary input stream. (unused for now).
+                 probe_succeeded         :1, //!< Tracks if last probing cycle was successful.
+                 soft_limit              :1, //!< Tracks soft limit errors for the state machine.
+                 exit                    :1, //!< System exit flag. Used in combination with abort to terminate main loop.
+                 block_delete_enabled    :1, //!< Set to true to enable block delete.
+                 feed_hold_pending       :1,
+                 optional_stop_disable   :1,
+                 single_block            :1, //!< Set to true to disable M1 (optional stop), via realtime command.
+                 keep_input              :1, //!< Set to true to not flush stream input buffer on executing STOP.
+                 auto_reporting          :1, //!< Set to true when auto real time reporting is enabled.
+                 unused                  :6;
     };
 } system_flags_t;
 
-typedef struct
-{
+typedef struct {
     control_signals_t control;
     limit_signals_t limits;
 } signal_event_t;
+
+typedef struct {
+    float min[N_AXIS];
+    float max[N_AXIS];
+} work_envelope_t;
 
 //! Global system variables struct.
 // NOTE: probe_position and position variables may need to be declared as volatiles, if problems arise.
@@ -229,6 +264,7 @@ typedef struct system {
     bool suspend;                           //!< System suspend state flag.
     bool position_lost;                     //!< Set when mc_reset is called when machine is moving.
     bool reset_pending;                     //!< Set when reset processing is underway.
+    bool blocking_event;                    //!< Set when a blocking event that requires reset to clear is active.
     volatile bool steppers_deenergize;      //!< Set to true to deenergize stepperes
     axes_signals_t tlo_reference_set;       //!< Axes with tool length reference offset set
     int32_t tlo_reference[N_AXIS];          //!< Tool length reference offset
@@ -238,6 +274,7 @@ typedef struct system {
     axes_signals_t homing_axis_lock;        //!< Locks axes when limits engage. Used as an axis motion mask in the stepper ISR.
     axes_signals_t homing;                  //!< Axes with homing enabled.
     overrides_t override;                   //!< Override values & states
+    system_override_delay_t override_delay; //!< Flags for delayed overrides.
     report_tracking_flags_t report;         //!< Tracks when to add data to status reports.
     parking_state_t parking_state;          //!< Tracks parking state
     hold_state_t holding_state;             //!< Tracks holding state
@@ -245,7 +282,6 @@ typedef struct system {
     volatile probing_state_t probing_state; //!< Probing state value. Used to coordinate the probing cycle with stepper ISR.
     volatile rt_exec_t rt_exec_state;       //!< Realtime executor bitflag variable for state management. See EXEC bitmasks.
     volatile uint_fast16_t rt_exec_alarm;   //!< Realtime executor bitflag variable for setting various alarms.
-    float spindle_rpm;                      //!< Current spindle RPM
     int32_t var5399;                        //!< Last result from M66 - wait on input
 #ifdef PID_LOG
     pid_data_t pid_log;
@@ -253,7 +289,8 @@ typedef struct system {
 //! @name The following variables are only cleared upon soft reset if position is likely lost, do NOT move. homed must be first!
 //@{
     axes_signals_t homed;                   //!< Indicates which axes has been homed.
-    float home_position[N_AXIS];            //!< Home position for homed axes
+    float home_position[N_AXIS];            //!< Home position for homed axes.
+    work_envelope_t work_envelope;          //!< Work envelope, only valid for homed axes.
 //@}
 //!  @name The following variables are not cleared upon soft reset, do NOT move. alarm must be first!
 //@{
@@ -261,7 +298,6 @@ typedef struct system {
     bool cold_start;                        //!< Set to true on boot, is false on subsequent soft resets.
     bool driver_started;                    //!< Set to true when driver initialization is completed.
     bool mpg_mode;                          //!< To be moved to system_flags_t
-    machine_mode_t mode;                    //!< Current machine mode, copied from settings.mode on startup.
     signal_event_t last_event;              //!< Last signal events (control and limits signal).
     int32_t position[N_AXIS];               //!< Real-time machine (aka home) position vector in steps.
 //@}
@@ -269,11 +305,20 @@ typedef struct system {
 
 typedef status_code_t (*sys_command_ptr)(sys_state_t state, char *args);
 
+typedef union {
+    uint8_t flags;
+    struct {
+        uint8_t noargs         :1, //!< System command does not handle arguments.
+                allow_blocking :1, //!< System command can be used when blocking event is active.
+                unused         :6;
+    };
+} sys_command_flags_t;
+
 typedef struct
 {
     const char *command;
-    bool noargs;
     sys_command_ptr execute;
+    sys_command_flags_t flags;
 } sys_command_t;
 
 typedef struct sys_commands_str {
@@ -312,6 +357,9 @@ void system_raise_alarm (alarm_code_t alarm);
 
 //! Provide system command help
 void system_command_help (void);
+
+void system_add_rt_report (report_tracking_t report);
+report_tracking_flags_t system_get_rt_report_flags (void);
 
 // Special handlers for setting and clearing Grbl's real-time execution flags.
 #define system_set_exec_state_flag(mask) hal.set_bits_atomic(&sys.rt_exec_state, (mask))

@@ -315,13 +315,13 @@ bool plan_check_full_buffer (void)
 // NOTE: All system motion commands, such as homing/parking, are not subject to overrides.
 float plan_compute_profile_nominal_speed (plan_block_t *block)
 {
-    float nominal_speed = block->condition.spindle.synchronized ? block->programmed_rate * hal.spindle.get_data(SpindleData_RPM)->rpm : block->programmed_rate;
+    float nominal_speed = block->spindle.state.synchronized ? block->programmed_rate * block->spindle.hal->get_data(SpindleData_RPM)->rpm : block->programmed_rate;
 
     if (block->condition.rapid_motion)
-        nominal_speed *= (0.01f * sys.override.rapid_rate);
+        nominal_speed *= (0.01f * (float)sys.override.rapid_rate);
     else {
         if (!block->condition.no_feed_override)
-            nominal_speed *= (0.01f * sys.override.feed_rate);
+            nominal_speed *= (0.01f * (float)sys.override.feed_rate);
         if (nominal_speed > block->rapid_rate)
             nominal_speed = block->rapid_rate;
     }
@@ -354,23 +354,6 @@ void plan_update_velocity_profile_parameters (void)
     }
     pl.previous_nominal_speed = prev_nominal_speed; // Update prev nominal speed for next incoming block.
 }
-
-#if N_AXIS > 3 && ROTARY_FIX
-
-static inline float convert_delta_vector_to_magnitude (float *vector)
-{
-    uint_fast8_t idx = N_AXIS;
-    float magnitude = 0.0f;
-
-    do {
-        if (vector[--idx] != 0.0f)
-            magnitude += vector[idx] * vector[idx];
-    } while(idx);
-
-    return sqrtf(magnitude);
-}
-
-#endif
 
 static inline float limit_acceleration_by_axis_maximum (float *unit_vec)
 {
@@ -465,21 +448,24 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
 
     } while(idx);
 
-    // Calculate RPMs to be used for Constant Surface Speed calculations
-    if(block->condition.is_rpm_pos_adjusted) {
+    // Calculate RPMs to be used for Constant Surface Speed (CSS) calculations.
+    if(block->spindle.css) {
+
         float pos;
-        if((pos = (float)position_steps[block->spindle.css.axis] / settings.axis[block->spindle.css.axis].steps_per_mm - block->spindle.css.tool_offset) > 0.0f) {
-            block->spindle.rpm = block->spindle.css.surface_speed / (pos * (float)(2.0f * M_PI));
-            if(block->spindle.rpm > block->spindle.css.max_rpm)
-                block->spindle.rpm = block->spindle.css.max_rpm;
+
+        if((pos = (float)position_steps[block->spindle.css->axis] / settings.axis[block->spindle.css->axis].steps_per_mm - block->spindle.css->tool_offset) > 0.0f) {
+            if((block->spindle.rpm = block->spindle.css->surface_speed / (pos * (float)(2.0f * M_PI))) > block->spindle.css->max_rpm)
+                block->spindle.rpm = block->spindle.css->max_rpm;
         } else
-            block->spindle.rpm = block->spindle.css.max_rpm;
-        if((pos = target[block->spindle.css.axis] - block->spindle.css.tool_offset) > 0.0f) {
-            block->spindle.css.target_rpm = block->spindle.css.surface_speed / (pos * (float)(2.0f * M_PI));
-            if(block->spindle.css.target_rpm > block->spindle.css.max_rpm)
-                block->spindle.css.target_rpm = block->spindle.css.max_rpm;
+            block->spindle.rpm = block->spindle.css->max_rpm;
+
+        if((pos = target[block->spindle.css->axis] - block->spindle.css->tool_offset) > 0.0f) {
+            if((block->spindle.css->target_rpm = block->spindle.css->surface_speed / (pos * (float)(2.0f * M_PI))) > block->spindle.css->max_rpm)
+                block->spindle.css->target_rpm = block->spindle.css->max_rpm;
         } else
-            block->spindle.css.target_rpm = block->spindle.css.max_rpm;
+            block->spindle.css->target_rpm = block->spindle.css->max_rpm;
+
+        block->spindle.css->delta_rpm = block->spindle.css->target_rpm - block->spindle.rpm;
     }
 
     // Bail if this is a zero-length block. Highly unlikely to occur.
@@ -491,38 +477,44 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
 
 #if N_AXIS > 3  && ROTARY_FIX
 
+    // NIST RS274 (2.1.2.5 A & 2.1.2.6) states that G94 linear motion with simultaneous angular motion
+    // has the feedrate assigned to the linear axes. To accomplish this we'll change the planner block to
+    // behave as if its doing a G93 inverse time mode move.
+
     if(!block->condition.inverse_time &&
-            /*!block->condition.rapid_motion &&*/
-        (motion.mask & settings.steppers.is_rotational.mask) &&
-         (motion.mask & ~settings.steppers.is_rotational.mask)) {
+        !block->condition.rapid_motion &&
+         (motion.mask & settings.steppers.is_rotational.mask) &&
+          (motion.mask & ~settings.steppers.is_rotational.mask)) {
 
-        float delta_vec[N_AXIS];
+        float linear_magnitude = 0.0f;
 
-        idx = A_AXIS;
-        motion.mask &= settings.steppers.is_rotational.mask;
-        motion.mask >>= 3;
-        memcpy(delta_vec, unit_vec, sizeof(delta_vec));
+        idx = 0;
+        motion.mask &= ~settings.steppers.is_rotational.mask;
 
         while(motion.mask) {
             if(motion.mask & 0x01)
-                unit_vec[idx] = delta_vec[idx] = 0.0f;
+                linear_magnitude += unit_vec[idx] * unit_vec[idx];
             motion.mask >>= 1;
             idx++;
         }
 
-        // feed rate for laser mode has to be the actual speed of the controlled
-        // point over the surface of the object to engrave?
-//        pl_data->feed_rate = 1.0f / (convert_delta_vector_to_magnitude(delta_vec) / pl_data->feed_rate);
-        pl_data->feed_rate = 1.0f / ((block->millimeters = convert_delta_vector_to_unit_vector(unit_vec)) / pl_data->feed_rate);
+        pl_data->feed_rate = 1.0f / (sqrtf(linear_magnitude) / pl_data->feed_rate);
+
         block->condition.inverse_time = On;
-    } else
+    }
 
 #endif
 
     // Calculate the unit vector of the line move and the block maximum feed rate and acceleration scaled
     // down such that no individual axes maximum values are exceeded with respect to the line direction.
+#if N_AXIS > 3  && ROTARY_FIX
+    // NOTE: This calculation assumes all block motion axes are orthogonal (Cartesian), and if also rotational, then
+    // motion mode must be inverse time mode. Operates on the absolute value of the unit vector.
+#else
     // NOTE: This calculation assumes all axes are orthogonal (Cartesian) and works with ABC-axes,
     // if they are also orthogonal/independent. Operates on the absolute value of the unit vector.
+#endif
+
     block->millimeters = convert_delta_vector_to_unit_vector(unit_vec);
     block->acceleration = limit_acceleration_by_axis_maximum(unit_vec);
     block->rapid_rate = limit_max_rate_by_axis_maximum(unit_vec);
@@ -662,7 +654,7 @@ void plan_cycle_reinitialize (void)
 }
 
 // Set feed overrides
-void plan_feed_override (uint_fast8_t feed_override, uint_fast8_t rapid_override)
+void plan_feed_override (override_t feed_override, override_t rapid_override)
 {
     bool feedrate_changed = false, rapidrate_changed = false;
 
@@ -673,9 +665,9 @@ void plan_feed_override (uint_fast8_t feed_override, uint_fast8_t rapid_override
 
     if ((feedrate_changed = feed_override != sys.override.feed_rate) ||
          (rapidrate_changed = rapid_override != sys.override.rapid_rate)) {
-        sys.override.feed_rate = (uint8_t)feed_override;
-        sys.override.rapid_rate = (uint8_t)rapid_override;
-        sys.report.overrides = On; // Set to report change immediately
+        sys.override.feed_rate = feed_override;
+        sys.override.rapid_rate = rapid_override;
+        system_add_rt_report(Report_Overrides); // Set to report change immediately
         plan_update_velocity_profile_parameters();
         plan_cycle_reinitialize();
         if(grbl.on_override_changed) {
@@ -685,4 +677,10 @@ void plan_feed_override (uint_fast8_t feed_override, uint_fast8_t rapid_override
                 grbl.on_override_changed(OverrideChanged_RapidRate);
         }
     }
+}
+
+void plan_data_init (plan_line_data_t *plan_data)
+{
+    memset(plan_data, 0, sizeof(plan_line_data_t));
+    plan_data->spindle.hal = gc_state.spindle.hal ? gc_state.spindle.hal : spindle_get(0);
 }

@@ -59,8 +59,7 @@ typedef union {
                 spindle       :1,
                 amass         :1,
                 pulse_delay   :1,
-                linearization :1,
-                unused        :2;
+                unused        :3;
     };
 } driver_startup_t;
 
@@ -203,13 +202,11 @@ int grbl_enter (void)
     if(driver.ok == 0xFF)
         driver.setup = hal.driver_setup(&settings);
 
-    spindle_select(settings.spindle.flags.type);
-
-#ifdef ENABLE_SPINDLE_LINEARIZATION
-    driver.linearization = hal.driver_cap.spindle_pwm_linearization;
-#endif
-
-    driver.spindle = hal.spindle.get_pwm == NULL || hal.spindle.update_pwm != NULL;
+    if((driver.spindle = spindle_select(settings.spindle.flags.type))) {
+        spindle_ptrs_t *spindle = spindle_get(0);
+        driver.spindle = spindle->get_pwm == NULL || spindle->update_pwm != NULL;
+    } else
+        driver.spindle = spindle_select(spindle_add_null());
 
     if(driver.ok != 0xFF) {
         sys.alarm = Alarm_SelftestFailed;
@@ -218,9 +215,7 @@ int grbl_enter (void)
 
     hal.stepper.enable(settings.steppers.deenergize);
 
-    if(hal.spindle.set_state)
-        hal.spindle.set_state((spindle_state_t){0}, 0.0f);
-
+    spindle_all_off();
     hal.coolant.set_state((coolant_state_t){0});
 
     if(hal.get_position)
@@ -253,6 +248,8 @@ int grbl_enter (void)
     // will return to this loop to be cleanly re-initialized.
     while(looping) {
 
+        spindle_num_t spindle_num = N_SYS_SPINDLE;
+
         // Reset report entry points
         report_init_fns();
 
@@ -264,7 +261,10 @@ int grbl_enter (void)
         sys.var5399 = -2;                                        // Clear last M66 result
         sys.override.feed_rate = DEFAULT_FEED_OVERRIDE;          // Set to 100%
         sys.override.rapid_rate = DEFAULT_RAPID_OVERRIDE;        // Set to 100%
-        sys.override.spindle_rpm = DEFAULT_SPINDLE_RPM_OVERRIDE; // Set to 100%
+        do {
+            if(spindle_is_enabled(--spindle_num))
+                spindle_get(spindle_num)->param->override_pct = DEFAULT_SPINDLE_RPM_OVERRIDE; // Set to 100%
+        } while(spindle_num);
         sys.flags.auto_reporting = settings.report_interval != 0;
 
         if(settings.parking.flags.enabled)
@@ -290,7 +290,7 @@ int grbl_enter (void)
             tc_init();
 
         // Print welcome message. Indicates an initialization has occurred at power-up or with a reset.
-        report_init_message();
+        grbl.report.init_message();
 
         if(state_get() == STATE_ESTOP)
             state_set(STATE_ALARM);

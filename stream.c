@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2021-2022 Terje Io
+  Copyright (c) 2021-2023 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -248,7 +248,7 @@ static bool stream_select (const io_stream_t *stream, bool add)
                 report_message("TELNET STREAM ACTIVE", Message_Plain);
             if(add && sys.driver_started) {
                 hal.stream.write_all = stream->write;
-                report_init_message();
+                grbl.report.init_message();
             }
             break;
 
@@ -257,7 +257,7 @@ static bool stream_select (const io_stream_t *stream, bool add)
                 report_message("WEBSOCKET STREAM ACTIVE", Message_Plain);
             if(add && sys.driver_started && !hal.stream.state.webui_connected) {
                 hal.stream.write_all = stream->write;
-                report_init_message();
+                grbl.report.init_message();
             }
             break;
 
@@ -266,7 +266,7 @@ static bool stream_select (const io_stream_t *stream, bool add)
                 report_message("BLUETOOTH STREAM ACTIVE", Message_Plain);
             if(add && sys.driver_started) {
                 hal.stream.write_all = stream->write;
-                report_init_message();
+                grbl.report.init_message();
             }
             break;
 
@@ -463,7 +463,7 @@ bool stream_mpg_enable (bool on)
     hal.stream.reset_read_buffer();
 
     sys.mpg_mode = on;
-    sys.report.mpg_mode = On;
+    system_add_rt_report(Report_MPGMode);
 
     // Force a realtime status report, all reports when MPG mode active
     protocol_enqueue_realtime_command(on ? CMD_STATUS_REPORT_ALL : CMD_STATUS_REPORT);
@@ -561,6 +561,15 @@ void debug_write (const char *s)
 {
     if(dbg_write) {
         dbg_write(s);
+        while(hal.debug.get_tx_buffer_count()); // Wait until message is delivered
+    }
+}
+
+void debug_writeln (const char *s)
+{
+    if(dbg_write) {
+        dbg_write(s);
+        dbg_write(ASCII_EOL);
         while(hal.debug.get_tx_buffer_count()); // Wait until message is delivered
     }
 }

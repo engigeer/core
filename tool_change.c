@@ -53,7 +53,7 @@ static control_signals_callback_ptr control_interrupt_callback = NULL;
 static void on_probe_completed (void)
 {
     if(!sys.flags.probe_succeeded)
-        report_message("Probe failed, try again.", Message_Plain);
+        grbl.report.feedback_message(Message_ProbeFailedRetry);
     else if(sys.tlo_reference_set.mask & bit(plane.axis_linear))
         gc_set_tool_offset(ToolLengthOffset_EnableDynamic, plane.axis_linear, sys.probe_position[plane.axis_linear] - sys.tlo_reference[plane.axis_linear]);
 //    else error?
@@ -93,11 +93,15 @@ static void reset (void)
     if(next_tool) { //TODO: move to gc_xxx() function?
         // Restore previous tool if reset is during change
 #if N_TOOLS
-        if((sys.report.tool = current_tool.tool != next_tool->tool))
+        if(current_tool.tool != next_tool->tool) {
             memcpy(gc_state.tool, &current_tool, sizeof(tool_data_t));
+            system_add_rt_report(Report_Tool);
+        }
 #else
-        if((sys.report.tool = current_tool.tool != next_tool->tool))
+        if(current_tool.tool != next_tool->tool) {
             memcpy(next_tool, &current_tool, sizeof(tool_data_t));
+            system_add_rt_report(Report_Tool);
+        }
 #endif
         gc_state.tool_pending = gc_state.tool->tool;
         next_tool = NULL;
@@ -110,8 +114,9 @@ static void reset (void)
 // Restore coolant and spindle status, return controlled point to original position.
 static bool restore (void)
 {
-    plan_line_data_t plan_data = {0};
+    plan_line_data_t plan_data;
 
+    plan_data_init(&plan_data);
     plan_data.condition.rapid_motion = On;
 
     target.values[plane.axis_linear] = tool_change_position;
@@ -128,7 +133,7 @@ static bool restore (void)
         sync_position();
 
         coolant_sync(gc_state.modal.coolant);
-        spindle_restore(gc_state.modal.spindle, gc_state.spindle.rpm);
+        spindle_restore(plan_data.spindle.hal, gc_state.modal.spindle.state, gc_state.spindle.rpm);
 
         if(!settings.flags.no_restore_position_after_M6) {
             previous.values[plane.axis_linear] += gc_get_offset(plane.axis_linear);
@@ -148,7 +153,7 @@ static bool restore (void)
 // Used in Manual and Manual_G59_3 modes ($341=1 or $341=2). Called from the foreground process.
 static void execute_warning (sys_state_t state)
 {
-    report_message("Perform a probe with $TPW first!", Message_Plain);
+    grbl.report.feedback_message(Message_ExecuteTPW);
 }
 
 // Execute restore position after touch off (on cycle start event).
@@ -162,7 +167,7 @@ static void execute_restore (sys_state_t state)
 
     change_completed();
 
-    report_feedback_message(Message_None);
+    grbl.report.feedback_message(Message_None);
 
     if(ok)
         system_set_exec_state_flag(EXEC_CYCLE_START);
@@ -175,7 +180,7 @@ static void execute_probe (sys_state_t state)
 #if COMPATIBILITY_LEVEL <= 1
     bool ok;
     coord_data_t offset;
-    plan_line_data_t plan_data = {0};
+    plan_line_data_t plan_data;
     gc_parser_flags_t flags = {0};
 
     if(probe_fixture)
@@ -184,6 +189,7 @@ static void execute_probe (sys_state_t state)
     // G59.3 contains offsets to position of TLS.
     settings_read_coord_data(CoordinateSystem_G59_3, &offset.values);
 
+    plan_data_init(&plan_data);
     plan_data.condition.rapid_motion = On;
 
     target.values[plane.axis_0] = offset.values[plane.axis_0];
@@ -196,6 +202,7 @@ static void execute_probe (sys_state_t state)
 
         plan_data.feed_rate = settings.tool_change.seek_rate;
         plan_data.condition.value = 0;
+        plan_data.spindle.state.value = 0;
         target.values[plane.axis_linear] -= settings.tool_change.probing_distance;
 
         if((ok = ok && mc_probe_cycle(target.values, &plan_data, flags) == GCProbe_Found))
@@ -216,8 +223,8 @@ static void execute_probe (sys_state_t state)
             if(!(sys.tlo_reference_set.mask & bit(plane.axis_linear))) {
                 sys.tlo_reference[plane.axis_linear] = sys.probe_position[plane.axis_linear];
                 sys.tlo_reference_set.mask |= bit(plane.axis_linear);
-                sys.report.tlo_reference = On;
-                report_feedback_message(Message_ReferenceTLOEstablished);
+                system_add_rt_report(Report_TLOReference);
+                grbl.report.feedback_message(Message_ReferenceTLOEstablished);
             } else
                 gc_set_tool_offset(ToolLengthOffset_EnableDynamic, plane.axis_linear,
                                     sys.probe_position[plane.axis_linear] - sys.tlo_reference[plane.axis_linear]);
@@ -332,7 +339,7 @@ static status_code_t tool_change (parser_state_t *parser_state)
     block_cycle_start = settings.tool_change.mode != ToolChange_SemiAutomatic;
 
     // Stop spindle and coolant.
-    hal.spindle.set_state((spindle_state_t){0}, 0.0f);
+    spindle_all_off();
     hal.coolant.set_state((coolant_state_t){0});
 
     execute_posted = false;
@@ -348,7 +355,9 @@ static status_code_t tool_change (parser_state_t *parser_state)
 
     previous.values[plane.axis_linear] -= gc_get_offset(plane.axis_linear);
 
-    plan_line_data_t plan_data = {0};
+    plan_line_data_t plan_data;
+
+    plan_data_init(&plan_data);
     plan_data.condition.rapid_motion = On;
 
     // TODO: add?
@@ -403,10 +412,12 @@ void tc_init (void)
     if(!hal.stream.suspend_read) // Tool change requires support for suspending input stream.
         return;
 
-    sys.report.tlo_reference = sys.tlo_reference_set.mask != 0;
-    sys.tlo_reference_set.mask = 0;
+    if(sys.tlo_reference_set.mask != 0) {
+        sys.tlo_reference_set.mask = 0;
+        system_add_rt_report(Report_TLOReference);
+    }
 
-    gc_set_tool_offset(ToolLengthOffset_Cancel, 0, 0.0f);
+gc_set_tool_offset(ToolLengthOffset_Cancel, 0, 0.0f);
 
     if(settings.tool_change.mode == ToolChange_Disabled || settings.tool_change.mode == ToolChange_Ignore) {
         hal.tool.select = NULL;
@@ -434,9 +445,11 @@ void tc_clear_tlo_reference (axes_signals_t homing_cycle)
 #else
         gc_get_plane_data(&plane, gc_state.modal.plane_select);
 #endif
-        if(homing_cycle.mask & (sys.mode == Mode_Lathe ? (X_AXIS_BIT|Z_AXIS_BIT) : bit(plane.axis_linear))) {
-            sys.report.tlo_reference = sys.tlo_reference_set.mask != 0;
-            sys.tlo_reference_set.mask = 0;  // Invalidate tool length offset reference
+        if(homing_cycle.mask & (settings.mode == Mode_Lathe ? (X_AXIS_BIT|Z_AXIS_BIT) : bit(plane.axis_linear))) {
+            if(sys.tlo_reference_set.mask != 0) {
+                sys.tlo_reference_set.mask = 0;  // Invalidate tool length offset reference
+                system_add_rt_report(Report_TLOReference);
+            }
         }
     }
 }
@@ -453,7 +466,7 @@ status_code_t tc_probe_workpiece (void)
 
     bool ok;
     gc_parser_flags_t flags = {0};
-    plan_line_data_t plan_data = {0};
+    plan_line_data_t plan_data;
 
 #if COMPATIBILITY_LEVEL <= 1
     if(probe_fixture)
@@ -464,6 +477,8 @@ status_code_t tc_probe_workpiece (void)
     system_convert_array_steps_to_mpos(target.values, sys.position);
 
     flags.probe_is_no_error = On;
+
+    plan_data_init(&plan_data);
     plan_data.feed_rate = settings.tool_change.seek_rate;
 
     target.values[plane.axis_linear] -= settings.tool_change.probing_distance;
@@ -494,9 +509,9 @@ status_code_t tc_probe_workpiece (void)
     if(ok && protocol_buffer_synchronize()) {
         sync_position();
         block_cycle_start = false;
-        report_message(settings.tool_change.mode == ToolChange_Manual_G59_3
-                        ? "Press cycle start to continue."
-                        : "Remove any touch plate and press cycle start to continue.", Message_Plain);
+        grbl.report.feedback_message(settings.tool_change.mode == ToolChange_Manual_G59_3
+                                      ? Message_CycleStart2Continue
+                                      : Message_TPCycleStart2Continue);
     }
 
     return ok ? Status_OK : Status_GCodeToolError;

@@ -1,10 +1,431 @@
 ## grblHAL changelog
 
+<a name="20230501"/>20230501
+
+Core: 
+
+* Fixed typos.
+
+* Added `grbl.on_gcode_comment` event - can be subscribed to by plugin code to trap comments and act upon them. Intended for implementation of non-standard functionality outside the scope of gcode and $-commands.
+
+Drivers:
+
+* ESP32: fix for spindle PWM not turning off on stop or soft reset.
+
+---
+
+<a name="20230429"/>Build 20230429
+
+Core:
+
+* Now allows some $-commands while critical events are active or in sleep mode. E.g. settings commands can be used to configure the controller.
+
+* Added work envelope data to [global sys struct](http://svn.io-engineering.com/grblHAL/html/structsystem.html), used by soft limits and jog limit handling. This can be modified by plugin code to restrict motion.
+
+Drivers:
+
+* STM32F1xx: added driver support for ganged and auto-squared axes.
+
+* STM32F4xx: fixed typos.
+
+---
+
+<a name="20230427"/>Build 20230427
+
+Core:
+
+* Fixed some typos, incorrect default value for setting $63 - _Disable laser during hold_ flag. Added VFS property.
+
+Drivers:
+
+* STM32F1xx: fix for [issue #34](https://github.com/grblHAL/STM32F1xx/issues/34), typo blocking GPIO interrupt for pin 4.
+
+* ESP32: improved handling of I2S/GPIO pin assignments, added _CMakeLists.txt_ option to enable custom _my_plugin.c_.
+
+* RP2040: added _CMakeLists.txt_ option to enable custom _my_plugin.c_.
+
+Plugins:
+
+* WebUI: fix for [issue #10](https://github.com/grblHAL/Plugin_WebUI/issues/10) - problem with saving files.
+
+* SDCard: added VFS property.
+
+---
+
+<a name="20230417"/>20230417
+
+Core:
+
+* Added missing files to CMakeLists.txt \(used by RP2040 build\).
+
+Drivers:
+
+* RP2040: Fix for incorrect step signals sent to PIO for ganged axes, [issue #60](https://github.com/grblHAL/RP2040/issues/60).
+
+---
+
+<a name="20230416"/>20230416
+
+Core:
+
+* Added reboot required tag for setting $16 and $38.
+
+Drivers:
+
+* ESP32: Improved handling of mixed I2S and GPIO signalling. Allows fix for [issue #70](https://github.com/grblHAL/ESP32/issues/70).
+
+* STM32F4xx: Improved clock tree handling for the different MCU variants, spindle sync fixes and improvements. Fix for [issue #117](https://github.com/grblHAL/STM32F4xx/issues/117), random pauses.
+
+* RP2040: Fix for incorrect reporting of spindle and coolant states in some configurations. Fixes ioSender [issue #286](https://github.com/terjeio/ioSender/issues/286).
+
+Plugins:
+
+* Embroidery: Fix for incorrect handling of jumps.
+
+---
+
+<a name="20230411"/>Build 20230411
+
+Core:
+
+* Fix for issue #236, dual axis offsets.  
+__NOTE:__ handling of negative offset values has changed. The primary motor will now be run to correct for negative offset values by moving away from the limit switch.
+Prior to this build the secondary motor was run to move towards the limit switch for negative values.
+* Changes to allow use of M4 for laser capable spindles in laser mode even if direction control is not available.
+
+Drivers:
+
+* STM32F4xx: pin mappings fix for [BTT SKR Pro 1.x](https://github.com/grblHAL/STM32F4xx/blob/master/Inc/btt_skr_pro_v1_1_map.h) to avoid IRQ conflicts.
+
+Plugins:
+
+* Networking: improved handling of .gz compressed files by httpd daemon.
+
+* Webui: more fixes for [issue #10](https://github.com/grblHAL/Plugin_WebUI/issues/10), cannot download any file from local FS but preferences.json.
+
+---
+
+<a name="20230409"/>20230409
+
+Plugins:
+
+* Networking: fix for incorrect header returned by httpd daemon for plain .gz files.
+
+* Webui: fixes for [issue #10](https://github.com/grblHAL/Plugin_WebUI/issues/10), cannot download any file from local FS but preferences.json.
+
+---
+
+<a name="20230401"/>Build 20230401
+
+Core:
+
+* Fix for issue #279 - B-axis pin name typo.
+* Added HAL capability flags for limit switches supported.
+* Improved motor pins preprocessor code.
+
+Drivers:
+
+* ESP32: fix for [issue #64](https://github.com/grblHAL/ESP32/issues/64) and [#67](https://github.com/grblHAL/ESP32/issues/67) - use single input for squaring two axes.
+
+* All: added call for setting new HAL limit switches capability flags.
+
+---
+
+<a name="20230331"/>20230331
+
+Plugins:
+
+* Motors: fix for [issue #11](https://github.com/grblHAL/Plugins_motor/issues/11), potential infinite loop.
+
+---
+
+<a name="20230321"/>Build 20230321
+
+Core:
+
+* Fix for issue #271 - unwanted motion after soft reset when feed hold was active, reported for canned cycle but may occur for other commands as well.
+* Added function for properly initializing planner struct, updated core to use it.
+
+Plugins:
+
+* Embroidery: switched to new function for initializing planner struct.
+
+Templates:
+
+* HPGL: switched to new function for initializing planner struct.
+
+---
+
+<a name="20230320"/>Build 20230320
+
+Core:
+
+* Another fix for issue #269 - setting of piecewise spindle linearisation values not working.  
+
+* Fix for incorrect reporting of SD card size.
+
+Drivers:
+
+* ESP32: added sanity checks for http and websocket ports, sets websocket port to http port + 1 if equal.
+
+Plugins:
+
+* Spindle: fix for [issue #18](https://github.com/grblHAL/Plugins_spindle/issues/18) - incorrect spindle RPM limits set from VFD response.
+
+* SD card: fix for incorrect reporting of SD card size.
+
+* Embroidery: added option to use Z limit input as needle trigger.
+
+---
+
+<a name="20230317"/>Build 20230317
+
+Core:
+
+* Fix for issue #269 - setting of piecewise spindle linearisation values not working.
+
+Drivers:
+
+* STM32F3xx, STM32F4xx, STM32F7xx: Updated linker config to allow use of scanf, part of fix for issue #269.
+
+Plugins:
+
+* Keypad: updated for core API changes.
+
+---
+
+<a name="20230316"/>20230316
+
+Core:
+
+* Added preprosessor symbol handling for embroidery plugin.
+
+Drivers:
+
+* iMXRT1062, RP2040, STM32F4xx, STM32F7xx and ESP32: Added option for enabling embroidery plugin.  
+__NOTE:__ The plugin requires one interrupt capable auxillary input and SD card support.
+
+Plugins:
+
+* Embroidery: initial commit for testing.
+
+---
+
+<a name="20230312"/>Build 20230312
+
+Core:
+
+* Added event definition for SD card file open, fix for issue #118.
+
+Drivers:
+
+* ESP32: Added aux I/O and cycle start/feed hold inputs to MKS DLC32 board, expanded max aux out to 4.  
+__NOTE:__ The aux input 0 port on the MKS DLC32 board does not have an internal pullup.
+
+Plugins:
+
+* SD card: added publish for file open event allowing plugins to take over stream handling. Added `$F+` command for listing all files on card.
+
+---
+
+<a name="20230311"/>20230311
+
+Core:
+
+* Fix for issue #264, stepper motors not disabled when entering sleep mode.  
+__NOTE:__ all stepper motors will now be disabled even if the $37 setting is set to keep some enabled.
+
+* Fix for recent regression that disabled G7/G8 handling in lathe mode.
+
+---
+
+<a name="20230302"/>20230302
+
+Core:
+
+* Minor fix for the `grbl.on_state_changed` event - incorrect state published following stop signal when streaming gcode.
+
+Drivers:
+
+* RP2040: Added initial support for I2C display protocol, using DMA transfers. 
+
+* STM32F4xx: Fix for EEPROM issue for ST Morpho CNC board maps.
+
+* STM32F7xx: Fix for missing motor enable outputs for ganged axes and fix for IRQ conflicts for 7+ axis configurations \(reference map\).
+
+Plugins:
+
+* Keypad: I2C display protocol plugin, type fix for homed status field.
+
+---
+
+<a name="20230228"/>20230228
+
+Core:
+
+* Fix for Arduino compiler issue with build 20230227. Added new core event and removed redundant code.
+
+Drivers:
+
+* STM32F4xx: Fixed missing pullup enable for EStop input. __NOTE:__ this may trigger EStop alarm for those who have not wired a switch to this input.
+
+Plugins:
+
+* Keypad: I2C display protocol plugin updated to allow multiple message extensions, simplified code.
+
+---
+
+<a name="20230227"/>20230227
+
+Core:
+
+* Enhanced API, reduced planner RAM footprint. Changed rotary fix implementation.
+
+Drivers:
+
+* RP2040: Fix for [issue #13](https://github.com/grblHAL/RP2040/issues/13#issuecomment-1445217377). Fixed typo and added generic 4-axis board map.
+
+* Most networking capable: fixed incorrect MQTT setting description.
+
+* STM32F4xx: fix for incorrect compiler error beeing reported for boards that polls the Z limit switch input.
+
+Plugins:
+
+* Keypad: I2C display protocol plugin updated to utilize gaps in data packet. Gcode message handling bug fix.
+
+---
+
+<a name="20230221"/>20230221
+
+Core:
+
+* Added definitions for some "standard" I2C API calls, for driver/plugin use.
+
+* Added _grbl.on_gcode_message_ event, can be used by driver/plugin writers to parse the message for extending functionality etc.  
+Triggered by `(MSG, "some message")` gcode comments.
+
+Drivers:
+
+* Almost all: updated to match new core defined I2C API. Note that some drivers only has a partial implementation, to be updated on demand.
+
+* ESP32: fixed up W5500 ethernet middle layer driver code, now works in DHCP mode with telnet enabled. Other protocols may work, not extensively tested.  
+Note that board map definitions has to be adjusted \(or added\) for ethernet as a SPI port in addtion to an interrupt input is required, none are presently set up for that.
+
+* STM32F4xx: updated some board maps/[Web Builder](http://svn.io-engineering.com:8080/) definitions to allow selection of EEPROM size or disabling EEPROM support altogether.
+
+Plugins:
+
+* Keypad: I2C display plugins updated to probe for display on startup, no longer attaches themself if not present.  
+Expanded I2C display interface protocol to add gcode message, when present, by dynamically adjusting I2C message length.
+
+---
+
+<a name="20230220"/>20230220
+
+Plugins:
+
+* Trinamic: Improved handling of per axis homing feedrates.
+
+* Spindle: Fix for issue #255 - fails to compile when single VFD spindle is selected.
+
+* Keypad: Initial commit of I2C display interface protocol. __NOTE:__ this is not yet available for compilation.
+
+---
+
+<a name="20230218"/>Build 20230218
+
+Core:
+
+Fix for Grbl [issue #1823](https://github.com/grbl/grbl/issues/1823) - some full circle arcs beeing ignored.
+
+Drivers:
+
+* STM32F4xx: added optional support for USART6. Fixed preprossor issue.
+
+* STM32F7xx: Fixed preprossor issue.
+
+---
+
+<a name="20230217"/>20230217, update 2.
+
+Core:
+
+* Fixed copy/paste "bug" that caused compilation error if compiling for 6-axes.
+
+Drivers:
+
+* STM32F1xx: updated to support up to 6-axes. Note that ganged/auto squared axes are currently not supported - to be added later.
+
+* STM32F4xx: fixed typos and compile time check for IRQ pin assignments.
+
+* STM32F7xx: fixed compile time check for IRQ pin assignments.
+
+---
+
+20230217
+
+Core:
+
+* Added compile time symbols and names for remaining control inputs, rephrased two alarm messages. No functional changes.
+
+Drivers:
+
+* STM32F1xx: added support for MPG mode and option to use UART5 \(untested\) in RC variants.  
+Added support for ioports interface \(aux I/O\) and now allows pin naming for RC variants.  
+Changed RAM allocation for Cx variants to accomodate above changes, this might also allow a larger planner buffer size.  
+Fixed some inconsistencies in BOARD_MACH3_BOB \(_mach3_bob_map.h_\) - untested.  
+__NOTE:__ Cx variants are no longer possible to debug due to limited flash, only the release version can be compiled.
+
+Plugins:
+
+* Motors and plasma: updated for spindle handling refactoring.
+
+---
+
+<a name="20230213"/>Build 20230213
+
+Core:
+
+* First phase of spindle handling refactoring with the aim to support multiple \(up to four\) _simultaneously_ active spindles.
+Spindle selection by tool number has also been implemented as an option. More details can be found in the [spindle plugin readme](https://github.com/grblHAL/Plugins_spindle/blob/master/README.md).  
+__NOTE:__ This change is quite large, bugs may have sneaked in. Please report any issues encountered ASAP.
+
+Drivers:
+
+* All: Updated for spindle handling refactoring.
+
+* iMXRT1062: updated readme for links to updated/patched libraries for SD card \(uSDFS\) and ethernet. User should switch to the updated/patched libraries if used.
+
+* MSP432P401R: fix for missing file include and serial stream registration.
+
+* RP2040: switched to SDK v1.5.0. Added new settings for RP2040, `$78` for wifi country code and `$337` for AP BSSID of AP to connect to. Both are optional.
+
+* STMF4xx: fix for issue [#110](https://github.com/grblHAL/STM32F4xx/issues/110), incorrect NVIC grouping.
+
+Plugins:
+
+* SD Card: fixed some minor inconsistencies.
+
+* Spindle: updated for spindle handling refactoring. Improved ModBus exception handling in some.  
+New spindle select settings and improved functionality, see the [spindle plugin readme](https://github.com/grblHAL/Plugins_spindle/blob/master/README.md) for more.
+
+* Odometer and PPI: updated for spindle handling refactoring.
+
+* Networking: wifi \(ESP32 and RP2040\), changed networking settings from `$30x` range to `$32x` range for station mode.  
+Added [MQTT](https://en.wikipedia.org/wiki/MQTT) API for plugin developers, example code using this can be found [here](https://github.com/grblHAL/Templates/tree/master/my_plugin/MQTT%20example).  
+__NOTE:__ networking and other plugin settings will be reset on update for ESP32 and RP2040, backup and restore.  
+
+---
+
 <a name="20230129"/>Build 20230129
 
 Core:
 
 * Fixed regression in tool change handling related to refactoring of _config.h_ in build 20230125.
+
+Drivers:
+
+* ESP32: Added all supported VFD spindles as options in CMakeLists.txt, some code cleanup.
 
 ---
 
@@ -96,7 +517,7 @@ Core:
 
 * Added single axis homing commands for U and V, remapping of ABC homing commands to UVW when configured.
 
-Plugins
+Plugins:
 
 * WebUI and Networking: fixes for compiler warnings.
 

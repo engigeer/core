@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2018-2021 Terje Io
+  Copyright (c) 2018-2023 Terje Io
   Copyright (c) 2016 Sungeun K. Jeon
 
   Grbl is free software: you can redistribute it and/or modify
@@ -23,7 +23,7 @@
 #include "hal.h"
 #include "state_machine.h"
 
-volatile bool slumber;
+static volatile bool slumber;
 
 static void fall_asleep()
 {
@@ -52,7 +52,6 @@ static void sleep_execute()
     // If reached, sleep counter has expired. Execute sleep procedures.
     // Notify user that Grbl has timed out and will be parking.
     // To exit sleep, resume or reset. Either way, the job will not be recoverable.
-    grbl.report.feedback_message(Message_SleepMode);
     system_set_exec_state_flag(EXEC_SLEEP);
 }
 
@@ -67,7 +66,7 @@ void sleep_check()
     // has any powered components enabled.
     // NOTE: With overrides or in laser mode, modal spindle and coolant state are not guaranteed. Need
     // to directly monitor and record running state during parking to ensure proper function.
-    if (!sys.steppers_deenergize && (gc_state.modal.spindle.value || gc_state.modal.coolant.value)) {
+    if (!sys.steppers_deenergize && (gc_state.modal.spindle.state.value || gc_state.modal.coolant.value)) {
         switch(state_get()) {
 
             case STATE_IDLE:

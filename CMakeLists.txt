@@ -6,6 +6,7 @@ target_sources(grbl INTERFACE
  ${CMAKE_CURRENT_LIST_DIR}/nvs_buffer.c
  ${CMAKE_CURRENT_LIST_DIR}/gcode.c
  ${CMAKE_CURRENT_LIST_DIR}/machine_limits.c
+ ${CMAKE_CURRENT_LIST_DIR}/messages.c
  ${CMAKE_CURRENT_LIST_DIR}/motion_control.c
  ${CMAKE_CURRENT_LIST_DIR}/my_plugin.c
  ${CMAKE_CURRENT_LIST_DIR}/nuts_bolts.c
@@ -28,4 +29,6 @@ target_sources(grbl INTERFACE
  ${CMAKE_CURRENT_LIST_DIR}/regex.c
  ${CMAKE_CURRENT_LIST_DIR}/ioports.c
  ${CMAKE_CURRENT_LIST_DIR}/vfs.c
+ ${CMAKE_CURRENT_LIST_DIR}/corexy.c
+ ${CMAKE_CURRENT_LIST_DIR}/wall_plotter.c
 )

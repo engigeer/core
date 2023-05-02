@@ -60,13 +60,12 @@ typedef union {
                  wifi                      :1,
                  spindle_pid               :1,
                  mpg_mode                  :1,
-                 spindle_pwm_linearization :1,
                  laser_ppi_mode            :1, //!< Laser PPI (Pulses Per Inch) mode is supported.
                  atc                       :1, //!< Automatic tool changer (ATC) is supported.
                  no_gcode_message_handling :1,
                  odometers                 :1,
                  pwm_spindle               :1,
-                 unassigned                :11;
+                 unassigned                :12;
     };
 } driver_cap_t;
 
@@ -583,7 +582,7 @@ typedef struct {
     homing_ptrs_t homing;                   //!< Handlers for limit switches, used by homing cycle.
     control_signals_ptrs_t control;         //!< Handlers for control switches.
     coolant_ptrs_t coolant;                 //!< Handlers for coolant.
-    spindle_ptrs_t spindle;                 //!< Handlers for spindle.
+    spindle_data_ptrs_t spindle_data;       //!< Handlers for getting/resetting spindle data (RPM, angular position, ...).
     stepper_ptrs_t stepper;                 //!< Handlers for stepper motors.
     io_stream_t stream;                     //!< Handlers for stream I/O.
     stream_select_ptr stream_select;        //!< Optional handler for switching between I/O streams.
@@ -624,7 +623,8 @@ typedef struct {
     bool (*stream_blocking_callback)(void);
 
     driver_cap_t driver_cap;                //!< Basic driver capabilities flags.
-    control_signals_t signals_cap;          //!< Control input signals supported by the core.
+    control_signals_t signals_cap;          //!< Control input signals supported by the driver.
+    limit_signals_t limits_cap;             //!< Limit input signals supported by the driver.
 
 } grbl_hal_t;
 

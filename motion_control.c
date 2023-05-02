@@ -139,8 +139,7 @@ bool mc_line (float *target, plan_line_data_t *pl_data)
 
                 plan_line_data_t pl_backlash;
 
-                memset(&pl_backlash, 0, sizeof(plan_line_data_t));
-
+                plan_data_init(&pl_backlash);
                 pl_backlash.condition.rapid_motion = On;
                 pl_backlash.condition.backlash_motion = On;
                 pl_backlash.line_number = pl_data->line_number;
@@ -176,9 +175,9 @@ bool mc_line (float *target, plan_line_data_t *pl_data)
         // Plan and queue motion into planner buffer.
         // While in M3 laser mode also set spindle state and force a buffer sync
         // if there is a coincident position passed.
-        if(!plan_buffer_line(target, pl_data) && sys.mode == Mode_Laser && pl_data->condition.spindle.on && !pl_data->condition.spindle.ccw) {
+        if(!plan_buffer_line(target, pl_data) && pl_data->spindle.hal->cap.laser && pl_data->spindle.state.on && !pl_data->spindle.state.ccw) {
             protocol_buffer_synchronize();
-            hal.spindle.set_state(pl_data->condition.spindle, pl_data->spindle.rpm);
+            pl_data->spindle.hal->set_state(pl_data->spindle.state, pl_data->spindle.rpm);
         }
 
 #ifdef KINEMATICS_API
@@ -209,14 +208,14 @@ bool mc_line (float *target, plan_line_data_t *pl_data)
 // distance from segment to the circle when the end points both lie on the circle.
 void mc_arc (float *target, plan_line_data_t *pl_data, float *position, float *offset, float radius, plane_t plane, int32_t turns)
 {
-    float center_axis0 = position[plane.axis_0] + offset[plane.axis_0];
-    float center_axis1 = position[plane.axis_1] + offset[plane.axis_1];
-    float r_axis0 = -offset[plane.axis_0];  // Radius vector from center to current location
-    float r_axis1 = -offset[plane.axis_1];
-    float rt_axis0 = target[plane.axis_0] - center_axis0;
-    float rt_axis1 = target[plane.axis_1] - center_axis1;
+    double center_axis0 = (double)position[plane.axis_0] + (double)offset[plane.axis_0];
+    double center_axis1 = (double)position[plane.axis_1] + (double)offset[plane.axis_1];
+    double r_axis0 = -(double)offset[plane.axis_0];  // Radius vector from center to current location
+    double r_axis1 = -(double)offset[plane.axis_1];
+    double rt_axis0 = (double)target[plane.axis_0] - center_axis0;
+    double rt_axis1 = (double)target[plane.axis_1] - center_axis1;
     // CCW angle between position and target from circle center. Only one atan2() trig computation required.
-    float angular_travel = atan2f(r_axis0 * rt_axis1 - r_axis1 * rt_axis0, r_axis0 * rt_axis0 + r_axis1 * rt_axis1);
+    float angular_travel = (float)atan2(r_axis0 * rt_axis1 - r_axis1 * rt_axis0, r_axis0 * rt_axis0 + r_axis1 * rt_axis1);
 
     if (turns > 0) { // Correct atan2 output per direction
         if (angular_travel >= -ARC_ANGULAR_TRAVEL_EPSILON)
@@ -235,7 +234,7 @@ void mc_arc (float *target, plan_line_data_t *pl_data, float *position, float *o
         do {
             idx--;
             if(!(idx == plane.axis_0 || idx == plane.axis_1))
-                linear_per_turn[idx] = (target[idx] - position[idx]) / arc_travel * 2.0f * M_PI;;
+                linear_per_turn[idx] = (target[idx] - position[idx]) / arc_travel * 2.0f * M_PI;
         } while(idx);
 #else
         float linear_per_turn = (target[plane.axis_linear] - position[plane.axis_linear]) / arc_travel * 2.0f * M_PI;
@@ -582,7 +581,7 @@ void mc_canned_drill (motion_mode_t motion, float *target, plan_line_data_t *pl_
                 mc_dwell(canned->dwell);
 
             if(canned->spindle_off)
-                hal.spindle.set_state((spindle_state_t){0}, 0.0f);
+                pl_data->spindle.hal->set_state((spindle_state_t){0}, 0.0f);
 
             // rapid retract
             switch(motion) {
@@ -603,7 +602,7 @@ void mc_canned_drill (motion_mode_t motion, float *target, plan_line_data_t *pl_
                 return;
 
             if(canned->spindle_off)
-                spindle_sync(0, gc_state.modal.spindle, pl_data->spindle.rpm);
+                spindle_sync(pl_data->spindle.hal, gc_state.modal.spindle.state, pl_data->spindle.rpm);
         }
 
        // rapid move to next position if incremental mode
@@ -670,7 +669,7 @@ void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thre
 
     // TODO: Add to initial move to compensate for acceleration distance?
     /*
-    float acc_distance = pl_data->feed_rate * hal.spindle.get_data(SpindleData_RPM)->rpm / settings.acceleration[Z_AXIS];
+    float acc_distance = pl_data->feed_rate * pl_data->spindle.hal->get_data(SpindleData_RPM)->rpm / settings.acceleration[Z_AXIS];
     acc_distance = acc_distance * acc_distance * settings.acceleration[Z_AXIS] * 0.5f;
      */
 
@@ -694,9 +693,9 @@ void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thre
         if(!protocol_buffer_synchronize() && state_get() != STATE_IDLE) // Wait until any previous moves are finished.
             return;
 
-        pl_data->condition.rapid_motion = Off;          // Clear rapid motion condition flag,
-        pl_data->condition.spindle.synchronized = On;   // enable spindle sync for cut
-        pl_data->overrides.feed_hold_disable = On;      // and disable feed hold
+        pl_data->condition.rapid_motion = Off;      // Clear rapid motion condition flag,
+        pl_data->spindle.state.synchronized = On;   // enable spindle sync for cut
+        pl_data->overrides.feed_hold_disable = On;  // and disable feed hold
 
         // Cut thread pass
 
@@ -723,8 +722,8 @@ void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thre
                 return;
         }
 
-        pl_data->condition.rapid_motion = On;           // Set rapid motion condition flag and
-        pl_data->condition.spindle.synchronized = Off;  // disable spindle sync for retract & reposition
+        pl_data->condition.rapid_motion = On;       // Set rapid motion condition flag and
+        pl_data->spindle.state.synchronized = Off;  // disable spindle sync for retract & reposition
 
         if(passes > 1) {
 
@@ -861,7 +860,7 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
         hal.limits.enable(false, true); // Disable hard limits pin change register for cycle duration
 
         // Turn off spindle and coolant (and update parser state)
-        if(hal.spindle.get_state().on)
+        if(spindle_is_on())
             gc_spindle_off();
 
         if(hal.coolant.get_state().mask)
@@ -924,14 +923,19 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
         sync_position();
     }
 
-    sys.report.homed = On;
+    system_add_rt_report(Report_Homed);
 
     homed_status = settings.limits.flags.hard_enabled && settings.limits.flags.check_at_init && limit_signals_merge(hal.limits.get_state()).value
                     ? Status_LimitsEngaged
                     : Status_OK;
 
-    if(homed_status == Status_OK && grbl.on_homing_completed)
-        grbl.on_homing_completed();
+    if(homed_status == Status_OK) {
+
+        limits_set_work_envelope();
+
+        if(grbl.on_homing_completed)
+            grbl.on_homing_completed();
+    }
 
     return homed_status;
 }

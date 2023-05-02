@@ -24,7 +24,7 @@
 For the most part, users will not need to directly modify these, but they are here for
 specific needs, i.e. performance tuning or adjusting to non-typical machines.
 <br>__IMPORTANT:__ Symbol/macro names starting with `DEFAULT_` contains default values for run-time
-                   configuarble settings that can be changed with `$=<setting id>` commands.
+                   configurable settings that can be changed with `$=<setting id>` commands.
                    Any changes to these requires a full re-compiling of the source code to propagate them.
                    A reset of non-volatile storage with `$RST=*` after reflashing is also required.
 */
@@ -47,7 +47,7 @@ If more than 3 axes are configured a compliant driver and board map file is need
 <br>__NOTE:__ Experimental, if more than 3 and less than 7 axes are configured the `ABC`
               axis letters can be remapped to `UWV`.
 */
-#if (N_AXIS > 3 && N_AXIS < 7) || defined __DOXYGEN__
+#if (!defined AXIS_REMAP_ABC2UVW && (N_AXIS > 3 && N_AXIS < 7)) || defined __DOXYGEN__
 #define AXIS_REMAP_ABC2UVW Off
 #endif
 
@@ -56,6 +56,13 @@ If more than 3 axes are configured a compliant driver and board map file is need
 */
 #if !defined N_SPINDLE || defined __DOXYGEN__
 #define N_SPINDLE 1
+#endif
+
+/*! \def N_SYS_SPINDLE
+\brief Defines number of simultaneously active spindles supported - minimum 1 (none), maximum 8.
+*/
+#if !defined N_SYS_SPINDLE || defined __DOXYGEN__
+#define N_SYS_SPINDLE 1
 #endif
 
 /*! \def BUILD_INFO
@@ -81,6 +88,25 @@ __NOTE:__ if switching to a level > 1 please reset non-volatile storage with `$R
 */
 #if !defined COMPATIBILITY_LEVEL || defined __DOXYGEN__
 #define COMPATIBILITY_LEVEL 0
+#endif
+
+/*! \def ENABLE_SPINDLE_LINEARIZATION
+\brief This feature alters the spindle PWM/speed to a nonlinear output with a simple piecewise linear curve.
+
+Useful for spindles that don't produce the right RPM from Grbl's standard spindle PWM
+linear model. Requires a solution by the 'fit_nonlinear_spindle.py' script in the /doc/script
+folder of the repo. See file comments on how to gather spindle data and run the script to
+generate a solution.
+*/
+#if !defined ENABLE_SPINDLE_LINEARIZATION || defined __DOXYGEN__
+#define ENABLE_SPINDLE_LINEARIZATION 0  // Set to 1 to enable spindle RPM linearization. Requires compatible driver if enabled.
+#endif
+
+/*! \def SPINDLE_NPWM_PIECES
+\brief Number of pieces used for spindle RPM linearization, enabled by setting \ref ENABLE_SPINDLE_LINEARIZATION to 1.
+*/
+#if !defined SPINDLE_NPWM_PIECES || defined __DOXYGEN__
+#define SPINDLE_NPWM_PIECES 4 // Number of pieces for spindle RPM linearization, max 4.
 #endif
 
 #include "nuts_bolts.h"
@@ -710,8 +736,8 @@ be re-enabled by disabling the spindle stop override, if needed. This is purely 
 to ensure the laser doesn't inadvertently remain powered while at a stop and cause a fire.
 */
 ///@{
-#if !defined DEFAULT_ENABLE_LASER_DURING_HOLD || defined __DOXYGEN__
-#define DEFAULT_ENABLE_LASER_DURING_HOLD Off
+#if !defined DEFAULT_DISABLE_LASER_DURING_HOLD || defined __DOXYGEN__
+#define DEFAULT_DISABLE_LASER_DURING_HOLD On
 #endif
 ///@}
 
@@ -871,19 +897,6 @@ not throw an alarm message.
 #if !defined DEFAULT_CHECK_LIMITS_AT_INIT || defined __DOXYGEN__
 #define DEFAULT_CHECK_LIMITS_AT_INIT Off
 #endif
-/*! \def DEFAULT_LIMITS_TWO_SWITCHES_ON_AXES
-\brief
-If your machine has two limits switches wired in parallel to one axis, you will need to enable
-this feature. Since the two switches are sharing a single pin, there is no way for grblHAL to tell
-which one is enabled. This option only effects homing, where if a limit is engaged, grblHAL will
-alarm out and force the user to manually disengage the limit switch. Otherwise, if you have one
-limit switch for each axis, don't enable this option. By keeping it disabled, you can perform a
-homing cycle while on the limit switch and not have to move the machine off of it.
-*/
-#if !defined DEFAULT_LIMITS_TWO_SWITCHES_ON_AXES || defined __DOXYGEN__
-#define DEFAULT_LIMITS_TWO_SWITCHES_ON_AXES Off // Default disabled. Set to \ref On or 1 to enable.
-#endif
-///@}
 
 /*! @name Group_Limits_DualAxis
 \brief Dual axis limits settings (Group_Limits_DualAxis)
@@ -1062,6 +1075,70 @@ Default value is 0, meaning spindle sync is disabled
 #define DEFAULT_SPINDLE_I_MAX   10.0f
 #endif
 
+#if ENABLE_SPINDLE_LINEARIZATION || defined __DOXYGEN__
+
+/*! @name $66 - Setting_LinearSpindlePiece1
+Defines the parameters for the first entry in the spindle RPM linearization table.
+*/
+///@{
+#if !defined DEFAULT_RPM_POINT01 || defined __DOXYGEN__
+#define DEFAULT_RPM_POINT01 DEFAULT_SPINDLE_RPM_MIN  // Don not change! Set DEFAULT_SPINDLE_RPM_MIN instead.
+#endif
+#if !defined DEFAULT_RPM_LINE_A1 || defined __DOXYGEN__
+#define DEFAULT_RPM_LINE_A1 3.197101e-03f
+#endif
+#if !defined DEFAULT_RPM_LINE_B1 || defined __DOXYGEN__
+#define DEFAULT_RPM_LINE_B1 -3.526076e-1f
+#endif
+///@}
+
+/*! @name $67 - Setting_LinearSpindlePiece2
+Defines the parameters for the second entry in the spindle RPM linearization table.
+*/
+///@{
+#if !defined DEFAULT_RPM_POINT12 || defined __DOXYGEN__
+#define DEFAULT_RPM_POINT12 9627.8  // Set to a float constant to enable.
+#endif
+#if !defined DEFAULT_RPM_LINE_A2 || defined __DOXYGEN__
+#define DEFAULT_RPM_LINE_A2  1.722950e-2f
+#endif
+#if !defined DEFAULT_RPM_LINE_B2 || defined __DOXYGEN__
+#define DEFAULT_RPM_LINE_B2  1.0f,
+#endif
+///@}
+
+/*! @name $68 - Setting_LinearSpindlePiece3
+Defines the parameters for the third entry in the spindle RPM linearization table.
+*/
+///@{
+#if !defined DEFAULT_RPM_POINT23 || defined __DOXYGEN__
+#define DEFAULT_RPM_POINT23 10813.9  // Set to a float constant to enable.
+#endif
+#if !defined DEFAULT_RPM_LINE_A3 || defined __DOXYGEN__
+#define DEFAULT_RPM_LINE_A3 5.901518e-02f
+#endif
+#if !defined DEFAULT_RPM_LINE_B3 || defined __DOXYGEN__
+#define DEFAULT_RPM_LINE_B3 4.881851e+02f
+#endif
+///@}
+
+/*! @name $69 - Setting_LinearSpindlePiece4
+Defines the parameters for the fourth entry in the spindle RPM linearization table.
+*/
+///@{
+#if !defined DEFAULT_RPM_POINT34 || defined __DOXYGEN__
+#define DEFAULT_RPM_POINT34 NAN  // Set to a float constant to enable.
+#endif
+#if !defined DEFAULT_RPM_LINE_A4 || defined __DOXYGEN__
+#define DEFAULT_RPM_LINE_A4  1.203413e-01f
+#endif
+#if !defined DEFAULT_RPM_LINE_B4 || defined __DOXYGEN__
+#define DEFAULT_RPM_LINE_B4  1.151360e+03f
+#endif
+///@}
+
+#endif // ENABLE_SPINDLE_LINEARIZATION
+
 // Tool change settings (Group_Toolchange)
 
 /*! @name $341 - Setting_ToolChangeMode
@@ -1126,15 +1203,15 @@ Requires homing cycles to be defined by \ref DEFAULT_HOMING_CYCLE_0 - \ref DEFAU
 #define DEFAULT_HOMING_ENABLE Off // Default disabled. Set to \ref On or 1 to enable.
 #endif
 
-/*! /def HOMING_SINGLE_AXIS_COMMANDS
+/*! /def DEFAULT_HOMING_SINGLE_AXIS_COMMANDS
 \brief Enables single axis homing commands.
 `$HX`, `$HY`, `$HZ` etc. for homing the respective axes.The full homing
 cycle is still invoked by the `$H` command. This is disabled by default.
 If you have a two-axis machine, _DON'T USE THIS_. Instead, just alter the homing cycle for two-axes.
 \internal Bit 1 in settings.homing.flags.
 */
-#if !defined HOMING_SINGLE_AXIS_COMMANDS || defined __DOXYGEN__
-#define HOMING_SINGLE_AXIS_COMMANDS Off // Default disabled. Set to \ref On or 1 to enable.
+#if !defined DEFAULT_HOMING_SINGLE_AXIS_COMMANDS || defined __DOXYGEN__
+#define DEFAULT_HOMING_SINGLE_AXIS_COMMANDS Off // Default disabled. Set to \ref On or 1 to enable.
 #endif
 
 /*! /def DEFAULT_HOMING_INIT_LOCK
@@ -1148,16 +1225,31 @@ mainly a safety feature to remind the user to home, since position is unknown to
 #define DEFAULT_HOMING_INIT_LOCK Off // Default disabled. Set to \ref On or 1 to enable.
 #endif
 
-/*! /def HOMING_FORCE_SET_ORIGIN
+/*! /def DEFAULT_HOMING_FORCE_SET_ORIGIN
 \brief
 After homing, grblHAL will set by default the entire machine space into negative space, as is typical
 for professional CNC machines, regardless of where the limit switches are located. Set this
 define to \ref On or 1 to force grblHAL to always set the machine origin at the homed location despite switch orientation.
 \internal Bit 3 in settings.homing.flags.
 */
-#if !defined HOMING_FORCE_SET_ORIGIN || defined __DOXYGEN__
-#define HOMING_FORCE_SET_ORIGIN Off // Default disabled. Set to \ref On or 1 to enable.
+#if !defined DEFAULT_HOMING_FORCE_SET_ORIGIN || defined __DOXYGEN__
+#define DEFAULT_HOMING_FORCE_SET_ORIGIN Off // Default disabled. Set to \ref On or 1 to enable.
 #endif
+
+/*! \def DEFAULT_LIMITS_TWO_SWITCHES_ON_AXES
+\brief
+If your machine has two limits switches wired in parallel to one axis, you will need to enable
+this feature. Since the two switches are sharing a single pin, there is no way for grblHAL to tell
+which one is enabled. This option only effects homing, where if a limit is engaged, grblHAL will
+alarm out and force the user to manually disengage the limit switch. Otherwise, if you have one
+limit switch for each axis, don't enable this option. By keeping it disabled, you can perform a
+homing cycle while on the limit switch and not have to move the machine off of it.
+\internal Bit 4 in settings.limits.flags.
+*/
+#if !defined DEFAULT_LIMITS_TWO_SWITCHES_ON_AXES || defined __DOXYGEN__
+#define DEFAULT_LIMITS_TWO_SWITCHES_ON_AXES Off // Default disabled. Set to \ref On or 1 to enable.
+#endif
+///@}
 
 /*! /def DEFAULT_HOMING_ALLOW_MANUAL
 \brief
@@ -1365,7 +1457,7 @@ greater.
 // pull-out position, power-up with a time-out, and plunge back to the original position at the
 // slower pull-out rate.
 // NOTE: Still a work-in-progress. Machine coordinates must be in all negative space and
-// does not work with HOMING_FORCE_SET_ORIGIN enabled. Parking motion also moves only in
+// does not work with DEFAULT_HOMING_FORCE_SET_ORIGIN enabled. Parking motion also moves only in
 // positive direction.
  *  // Default disabled. Uncomment to enable.
 */
@@ -1426,7 +1518,7 @@ Parking axis target. In mm, as machine coordinate [-max_travel, 0].
 Parking fast rate after pull-out in mm/min.
 */
 ///@{
-#if !defined DEFAULT_HOMING_CYCLE_5 || defined __DOXYGEN__
+#if !defined DEFAULT_PARKING_RATE || defined __DOXYGEN__
 #define DEFAULT_PARKING_RATE 500.0f // mm/min
 #endif
 ///@}
@@ -1571,7 +1663,7 @@ second motor for ganged/auto squared axes.
 */
 ///@{
 #if !defined DEFAULT_STEP_PULSE_DELAY || defined __DOXYGEN__
-#define DEFAULT_STEP_PULSE_DELAY 5.0f // uncomment to set default > 0.0f
+#define DEFAULT_STEP_PULSE_DELAY 0.0f
 #endif
 ///@}
 
@@ -1681,28 +1773,28 @@ Timezone offset from UTC in hours, allowed range is -12.0 - 12.0.
 */
 ///@{
 #if !defined DEFAULT_X_ACCELERATION || defined __DOXYGEN__
-#define DEFAULT_X_ACCELERATION 10.0f // mm/min^2
+#define DEFAULT_X_ACCELERATION 10.0f // mm/sec^2
 #endif
 #if !defined DEFAULT_Y_ACCELERATION || defined __DOXYGEN__
-#define DEFAULT_Y_ACCELERATION 10.0f // mm/min^2
+#define DEFAULT_Y_ACCELERATION 10.0f // mm/sec^2
 #endif
 #if !defined DEFAULT_Z_ACCELERATION || defined __DOXYGEN__
-#define DEFAULT_Z_ACCELERATION 10.0f // mm/min^2
+#define DEFAULT_Z_ACCELERATION 10.0f // mm/sec^2
 #endif
 #if (defined A_AXIS && !defined DEFAULT_A_ACCELERATION) || defined __DOXYGEN__
-#define DEFAULT_A_ACCELERATION 10.0f // mm/min^2
+#define DEFAULT_A_ACCELERATION 10.0f // mm/sec^2
 #endif
 #if (defined B_AXIS && !defined DEFAULT_B_ACCELERATION) || defined __DOXYGEN__
-#define DEFAULT_B_ACCELERATION 10.0f // mm/min^2
+#define DEFAULT_B_ACCELERATION 10.0f // mm/sec^2
 #endif
 #if (defined C_AXIS && !defined DEFAULT_C_ACCELERATION) || defined __DOXYGEN__
-#define DEFAULT_C_ACCELERATION 10.0f // mm/min^2
+#define DEFAULT_C_ACCELERATION 10.0f // mm/sec^2
 #endif
 #if (defined U_AXIS && !defined DEFAULT_U_ACCELERATION) || defined __DOXYGEN__
-#define DEFAULT_U_ACCELERATION 10.0f // mm/min^2
+#define DEFAULT_U_ACCELERATION 10.0f // mm/sec^2
 #endif
 #if (defined V_AXIS && !defined DEFAULT_V_ACCELERATION) || defined __DOXYGEN__
-#define DEFAULT_V_ACCELERATION 10.0f // mm/min^2
+#define DEFAULT_V_ACCELERATION 10.0f // mm/sec^2
 #endif
 ///@}
 
@@ -1741,28 +1833,28 @@ __NOTE:__ Must be a positive values.
  */
 ///@{
 #if !defined DEFAULT_X_CURRENT || defined __DOXYGEN__
-#define DEFAULT_X_CURRENT 0.0 // amps
+#define DEFAULT_X_CURRENT 0.0 // mA
 #endif
 #if !defined DEFAULT_Y_CURRENT || defined __DOXYGEN__
-#define DEFAULT_Y_CURRENT 0.0 // amps
+#define DEFAULT_Y_CURRENT 0.0 // mA
 #endif
 #if !defined DEFAULT_Z_CURRENT || defined __DOXYGEN__
-#define DEFAULT_Z_CURRENT 0.0 // amps
+#define DEFAULT_Z_CURRENT 0.0 // mA
 #endif
 #if (defined A_AXIS && !defined DEFAULT_A_CURRENT) || defined __DOXYGEN__
-#define DEFAULT_A_CURRENT 0.0 // amps
+#define DEFAULT_A_CURRENT 0.0 // mA
 #endif
 #if (defined B_AXIS && !defined DEFAULT_B_CURRENT) || defined __DOXYGEN__
-#define DEFAULT_B_CURRENT 0.0 // amps
+#define DEFAULT_B_CURRENT 0.0 // mA
 #endif
 #if (defined C_AXIS && !defined DEFAULT_C_CURRENT) || defined __DOXYGEN__
-#define DEFAULT_C_CURRENT 0.0 // amps
+#define DEFAULT_C_CURRENT 0.0 // mA
 #endif
 #if (defined U_AXIS && !defined DEFAULT_U_CURRENT) || defined __DOXYGEN__
-#define DEFAULT_U_CURRENT 0.0 // amps
+#define DEFAULT_U_CURRENT 0.0 // mA
 #endif
 #if (defined V_AXIS && !defined DEFAULT_V_CURRENT) || defined __DOXYGEN__
-#define DEFAULT_V_CURRENT 0.0 // amps
+#define DEFAULT_V_CURRENT 0.0 // mA
 #endif
 ///@}
 
@@ -1776,6 +1868,21 @@ __NOTE:__ Must be a positive values.
 #if defined(N_TOOLS) && N_TOOLS > 16
 #undef N_TOOLS
 #define N_TOOLS 16
+#endif
+
+#if N_SYS_SPINDLE > N_SPINDLE
+#undef N_SYS_SPINDLE
+#define N_SYS_SPINDLE N_SPINDLE
+#endif
+
+#if N_SYS_SPINDLE < 1
+#undef N_SYS_SPINDLE
+#define N_SYS_SPINDLE 1
+#endif
+
+#if N_SYS_SPINDLE > 8
+#undef N_SYS_SPINDLE
+#define N_SYS_SPINDLE 8
 #endif
 
 #if (REPORT_WCO_REFRESH_BUSY_COUNT < REPORT_WCO_REFRESH_IDLE_COUNT)
@@ -1822,13 +1929,13 @@ __NOTE:__ Must be a positive values.
 
 #if DEFAULT_PARKING_ENABLE > 0
   #if DEFAULT_HOMING_FORCE_SET_ORIGIN > 0
-    #error "HOMING_FORCE_SET_ORIGIN is not supported with PARKING_ENABLE at this time."
+    #error "DEFAULT_HOMING_FORCE_SET_ORIGIN is not supported with DEFAULT_PARKING_ENABLE at this time."
   #endif
 #endif
 
 #if DEFAULT_ENABLE_PARKING_OVERRIDE_CONTROL > 0
   #if DEFAULT_PARKING_ENABLE < 1
-    #error "ENABLE_PARKING_OVERRIDE_CONTROL must be enabled with PARKING_ENABLE."
+    #error "DEFAULT_ENABLE_PARKING_OVERRIDE_CONTROL must be enabled with DEFAULT_PARKING_ENABLE."
   #endif
 #endif
 

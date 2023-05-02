@@ -182,7 +182,13 @@ static st_prep_t prep;
 static void output_message (sys_state_t state)
 {
     if(message) {
-        report_message(message, Message_Plain);
+
+        if(grbl.on_gcode_message)
+            grbl.on_gcode_message(message);
+
+        if(*message)
+            report_message(message, Message_Plain);
+
         free(message);
         message = NULL;
     }
@@ -196,7 +202,6 @@ void st_deenergize (void)
         sys.steppers_deenergize = false;
     }
 }
-
 
 // Stepper state initialization. Cycle should only start if the st.cycle_start flag is
 // enabled. Startup init and limits call this function but shouldn't start the cycle.
@@ -225,10 +230,14 @@ ISR_CODE void ISR_FUNC(st_go_idle)(void)
 
     // Set stepper driver idle state, disabled or enabled, depending on settings and circumstances.
     if (((settings.steppers.idle_lock_time != 255) || sys.rt_exec_alarm || state == STATE_SLEEP) && state != STATE_HOMING) {
-        // Force stepper dwell to lock axes for a defined amount of time to ensure the axes come to a complete
-        // stop and not drift from residual inertial forces at the end of the last movement.
-        sys.steppers_deenergize = true;
-        hal.delay_ms(settings.steppers.idle_lock_time, st_deenergize);
+        if(state == STATE_SLEEP)
+            hal.stepper.enable((axes_signals_t){0});
+        else {
+            // Force stepper dwell to lock axes for a defined amount of time to ensure the axes come to a complete
+            // stop and not drift from residual inertial forces at the end of the last movement.
+            sys.steppers_deenergize = true;
+            hal.delay_ms(settings.steppers.idle_lock_time, st_deenergize);
+        }
     } else
         hal.stepper.enable(settings.steppers.idle_lock_time == 255 ? (axes_signals_t){AXES_BITMASK} : settings.steppers.deenergize);
 }
@@ -395,16 +404,16 @@ ISR_CODE void ISR_FUNC(stepper_driver_interrupt_handler)(void)
          #endif
 
             if(st.exec_segment->update_pwm)
-                hal.spindle.update_pwm(st.exec_segment->spindle_pwm);
+                st.exec_segment->update_pwm(st.exec_segment->spindle_pwm);
             else if(st.exec_segment->update_rpm)
-                hal.spindle.update_rpm(st.exec_segment->spindle_rpm);
+                st.exec_segment->update_rpm(st.exec_segment->spindle_rpm);
         } else {
             // Segment buffer empty. Shutdown.
             st_go_idle();
 
             // Ensure pwm is set properly upon completion of rate-controlled motion.
-            if (st.exec_block->dynamic_rpm && sys.mode == Mode_Laser)
-                hal.spindle.update_pwm(hal.spindle.pwm_off_value);
+            if (st.exec_block->dynamic_rpm && st.exec_block->spindle->cap.laser)
+                st.exec_block->spindle->update_pwm(st.exec_block->spindle->pwm_off_value);
 
             st.exec_block = NULL;
             system_set_exec_state_flag(EXEC_CYCLE_COMPLETE); // Flag main program for cycle complete
@@ -741,11 +750,12 @@ void st_prep_buffer (void)
 
                 // Setup laser mode variables. RPM rate adjusted motions will always complete a motion with the
                 // spindle off.
-                if ((st_prep_block->dynamic_rpm = pl_block->condition.is_rpm_rate_adjusted))
+                if ((st_prep_block->dynamic_rpm = pl_block->condition.is_rpm_rate_adjusted)) {
                     // Pre-compute inverse programmed rate to speed up RPM updating per step segment.
+                    st_prep_block->spindle = pl_block->spindle.hal;
                     prep.inv_feedrate = pl_block->condition.is_laser_ppi_mode ? 1.0f : 1.0f / pl_block->programmed_rate;
-                else
-                    st_prep_block->dynamic_rpm = pl_block->condition.is_rpm_pos_adjusted;
+                } else
+                    st_prep_block->dynamic_rpm = !!pl_block->spindle.css;
             }
 
             /* ---------------------------------------------------------------------------------
@@ -842,7 +852,7 @@ void st_prep_buffer (void)
             }
 
             if(state_get() != STATE_HOMING)
-                sys.step_control.update_spindle_rpm |= (sys.mode == Mode_Laser); // Force update whenever updating block in laser mode.
+                sys.step_control.update_spindle_rpm |= pl_block->spindle.hal->cap.laser; // Force update whenever updating block in laser mode.
 
             probe_asserted = false;
         }
@@ -856,7 +866,8 @@ void st_prep_buffer (void)
 
         // Set new segment to point to the current segment data block.
         prep_segment->exec_block = st_prep_block;
-        prep_segment->update_rpm = prep_segment->update_pwm = false;
+        prep_segment->update_rpm = NULL;
+        prep_segment->update_pwm = NULL;
 
         /*------------------------------------------------------------------------------------
             Compute the average velocity of this new segment by determining the total distance
@@ -969,27 +980,31 @@ void st_prep_buffer (void)
 
         if (sys.step_control.update_spindle_rpm || st_prep_block->dynamic_rpm) {
             float rpm;
-            if (pl_block->condition.spindle.on) {
-                // NOTE: Feed and rapid overrides are independent of PWM value and do not alter laser power/rate.
-                // If current_speed is zero, then may need to be rpm_min*(100/MAX_SPINDLE_RPM_OVERRIDE)
-                // but this would be instantaneous only and during a motion. May not matter at all.
-                rpm = spindle_set_rpm(pl_block->condition.is_rpm_rate_adjusted && !pl_block->condition.is_laser_ppi_mode
-                                       ? pl_block->spindle.rpm * prep.current_speed * prep.inv_feedrate
-                                       : pl_block->spindle.rpm, sys.override.spindle_rpm);
-
-                if(pl_block->condition.is_rpm_pos_adjusted) {
+            if (pl_block->spindle.state.on) {
+                if(pl_block->spindle.css) {
                     float npos = (float)(pl_block->step_event_count - prep.steps_remaining) / (float)pl_block->step_event_count;
-                    rpm += (spindle_set_rpm(pl_block->spindle.css.target_rpm, sys.override.spindle_rpm) - prep.current_spindle_rpm) * npos;
+                    rpm = spindle_set_rpm(pl_block->spindle.hal,
+                                           pl_block->spindle.rpm + pl_block->spindle.css->delta_rpm * npos,
+                                            pl_block->spindle.hal->param->override_pct);
+                } else {
+                    // NOTE: Feed and rapid overrides are independent of PWM value and do not alter laser power/rate.
+                    // If current_speed is zero, then may need to be rpm_min*(100/MAX_SPINDLE_RPM_OVERRIDE)
+                    // but this would be instantaneous only and during a motion. May not matter at all.
+                    rpm = spindle_set_rpm(pl_block->spindle.hal,
+                                           pl_block->condition.is_rpm_rate_adjusted && !pl_block->condition.is_laser_ppi_mode
+                                            ? pl_block->spindle.rpm * prep.current_speed * prep.inv_feedrate
+                                            : pl_block->spindle.rpm, pl_block->spindle.hal->param->override_pct);
                 }
             } else
-                sys.spindle_rpm = rpm = 0.0f;
+                pl_block->spindle.hal->param->rpm = rpm = 0.0f;
 
             if(rpm != prep.current_spindle_rpm) {
-                if((prep_segment->update_pwm = hal.spindle.get_pwm != NULL)) {
+                if(pl_block->spindle.hal->get_pwm != NULL) {
                     prep.current_spindle_rpm = rpm;
-                    prep_segment->spindle_pwm = hal.spindle.get_pwm(rpm);
+                    prep_segment->update_pwm = pl_block->spindle.hal->update_pwm;
+                    prep_segment->spindle_pwm = pl_block->spindle.hal->get_pwm(rpm);
                 } else {
-                    prep_segment->update_rpm = true;
+                    prep_segment->update_rpm = pl_block->spindle.hal->update_rpm;
                     prep.current_spindle_rpm = prep_segment->spindle_rpm = rpm;
                 }
                 sys.step_control.update_spindle_rpm = Off;
@@ -1036,7 +1051,7 @@ void st_prep_buffer (void)
         uint32_t cycles = (uint32_t)ceilf(cycles_per_min * inv_rate); // (cycles/step)
 
         // Record end position of segment relative to block if spindle synchronized motion
-        if((prep_segment->spindle_sync = pl_block->condition.spindle.synchronized)) {
+        if((prep_segment->spindle_sync = pl_block->spindle.state.synchronized)) {
             prep.target_position += dt * prep.target_feed;
             prep_segment->cruising = prep.ramp_type == Ramp_Cruise;
             prep_segment->target_position = prep.target_position; //st_prep_block->millimeters - pl_block->millimeters;

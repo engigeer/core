@@ -162,7 +162,7 @@ typedef enum {
 
 // Optional driver implemented settings
 
-    // Normally used for Ethernet or WiFi Station
+    // Normally used for Ethernet
     Setting_Hostname = 300,
     Setting_IpMode = 301,
     Setting_IpAddress = 302,
@@ -184,6 +184,7 @@ typedef enum {
     Setting_WebSocketPort2 = 317,
     Setting_FtpPort2 = 318,
 
+    // Normally used for WiFi Station
     Setting_Hostname3 = 320,
     Setting_IpMode3 = 321,
     Setting_IpAddress3 = 322,
@@ -201,6 +202,8 @@ typedef enum {
     Setting_NTPServerURI_3 = 334,
     Setting_Timezone = 335,
     Setting_DSTActive = 336,
+
+    Setting_Wifi_AP_BSSID = 337,
 
     Setting_TrinamicDriver = 338,
     Setting_TrinamicHoming = 339,
@@ -299,6 +302,11 @@ typedef enum {
     Setting_VFD_20 = 472,
     Setting_VFD_21 = 473,
 
+    Setting_VFD_ModbusAddress0 = 476,
+    Setting_VFD_ModbusAddress1 = 477,
+    Setting_VFD_ModbusAddress2 = 478,
+    Setting_VFD_ModbusAddress3 = 479,
+
     Setting_Fan0OffDelay = 480,
     Setting_AutoReportInterval = 481,
     Setting_TimeZoneOffset = 482,
@@ -325,6 +333,29 @@ typedef enum {
     Setting_MacroPort7 = 507,
     Setting_MacroPort8 = 508,
     Setting_MacroPort9 = 509,
+
+    Setting_SpindleEnable0 = 510,
+    Setting_SpindleEnable1 = 511,
+    Setting_SpindleEnable2 = 512,
+    Setting_SpindleEnable3 = 513,
+    Setting_SpindleEnable4 = 514,
+    Setting_SpindleEnable5 = 515,
+    Setting_SpindleEnable6 = 516,
+    Setting_SpindleEnable7 = 517,
+
+    Setting_SpindleToolStart0 = 520,
+    Setting_SpindleToolStart1 = 521,
+    Setting_SpindleToolStart2 = 522,
+    Setting_SpindleToolStart3 = 523,
+    Setting_SpindleToolStart4 = 524,
+    Setting_SpindleToolStart5 = 525,
+    Setting_SpindleToolStart6 = 526,
+    Setting_SpindleToolStart7 = 527,
+
+    Setting_MQTTBrokerIpAddress = 530,
+    Setting_MQTTBrokerPort      = 531,
+    Setting_MQTTBrokerUserName  = 532,
+    Setting_MQTTBrokerPassword  = 533,
 
     Setting_SettingsMax,
     Setting_SettingsAll = Setting_SettingsMax,
@@ -647,59 +678,60 @@ typedef struct {
 } settings_t;
 
 typedef enum {
-    Group_Root = 0,
-    Group_General,
-    Group_ControlSignals,
-    Group_Limits,
-    Group_Limits_DualAxis,
-    Group_Coolant,
-    Group_Spindle,
-    Group_Spindle_Sync,
-    Group_Spindle_ClosedLoop,
-    Group_Toolchange,
-    Group_Plasma,
-    Group_Homing,
-    Group_Probing,
-    Group_SafetyDoor,
-    Group_Jogging,
-    Group_Networking,
-    Group_Networking_Wifi,
-    Group_Bluetooth,
-    Group_AuxPorts,
-    Group_ModBus,
-    Group_Encoders,
-    Group_Encoder0,
-    Group_Encoder1,
-    Group_Encoder2,
-    Group_Encoder3,
-    Group_Encoder4,
-    Group_UserSettings,
-    Group_Stepper,
-    Group_MotorDriver,
-    Group_VFD,
-    Group_CANbus,
-    Group_Axis,
+    Group_Root = 0,             //!< 0
+    Group_General,              //!< 1
+    Group_ControlSignals,       //!< 2
+    Group_Limits,               //!< 3
+    Group_Limits_DualAxis,      //!< 4
+    Group_Coolant,              //!< 5
+    Group_Spindle,              //!< 6
+    Group_Spindle_Sync,         //!< 7
+    Group_Spindle_ClosedLoop,   //!< 8
+    Group_Toolchange,           //!< 9
+    Group_Plasma,               //!< 10
+    Group_Homing,               //!< 11
+    Group_Probing,              //!< 12
+    Group_SafetyDoor,           //!< 13
+    Group_Jogging,              //!< 14
+    Group_Networking,           //!< 15
+    Group_Networking_Wifi,      //!< 16
+    Group_Bluetooth,            //!< 17
+    Group_AuxPorts,             //!< 18
+    Group_ModBus,               //!< 19
+    Group_Encoders,             //!< 20
+    Group_Encoder0,             //!< 21
+    Group_Encoder1,             //!< 22
+    Group_Encoder2,             //!< 23
+    Group_Encoder3,             //!< 24
+    Group_Encoder4,             //!< 25
+    Group_UserSettings,         //!< 26
+    Group_Stepper,              //!< 27
+    Group_MotorDriver,          //!< 28
+    Group_VFD,                  //!< 29
+    Group_CANbus,               //!< 30
+    Group_Embroidery,           //!< 31
+    Group_Axis,                 //!< 32
 // NOTE: axis groups MUST be sequential AND last
-    Group_Axis0,
-    Group_XAxis = Group_Axis0,
-    Group_YAxis,
-    Group_ZAxis,
+    Group_Axis0,                //!< 33
+    Group_XAxis = Group_Axis0,  //!< 34
+    Group_YAxis,                //!< 35
+    Group_ZAxis,                //!< 36
 #ifdef A_AXIS
-    Group_AAxis,
+    Group_AAxis,                //!< 37
 #endif
 #ifdef B_AXIS
-    Group_BAxis,
+    Group_BAxis,                //!< 38
 #endif
 #ifdef C_AXIS
-    Group_CAxis,
+    Group_CAxis,                //!< 39
 #endif
 #ifdef U_AXIS
-    Group_UAxis,
+    Group_UAxis,                //!< 40
 #endif
 #ifdef V_AXIS
-    Group_VAxis,
+    Group_VAxis,                //!< 41
 #endif
-    Group_All = Group_Root
+    Group_All = Group_Root      //!< 0
 } setting_group_t;
 
 typedef enum {
@@ -770,6 +802,14 @@ typedef struct {
     const char *description;
 } setting_descr_t;
 
+typedef union {
+    uint8_t value;
+    struct {
+        uint8_t spindle    :1,
+                unassigned :7;
+    };
+} settings_changed_flags_t;
+
 typedef status_code_t (*setting_set_int_ptr)(setting_id_t id, uint_fast16_t value);
 typedef status_code_t (*setting_set_float_ptr)(setting_id_t id, float value);
 typedef status_code_t (*setting_set_string_ptr)(setting_id_t id, char *value);
@@ -780,8 +820,9 @@ typedef bool (*setting_output_ptr)(const setting_detail_t *setting, uint_fast16_
 
 /*! \brief Pointer to callback function to be called when settings are loaded or changed.
 \param settings pointer to \a settings_t struct containing the settings.
+\param changed a \a settings_changed_flags_t union containing the changed setting groups.
 */
-typedef void (*settings_changed_ptr)(settings_t *settings);
+typedef void (*settings_changed_ptr)(settings_t *settings, settings_changed_flags_t changed);
 
 typedef void (*driver_settings_load_ptr)(void);
 typedef void (*driver_settings_save_ptr)(void);

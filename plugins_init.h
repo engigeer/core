@@ -43,11 +43,6 @@
     vfd_init();
 #endif
 
-#if N_SPINDLE > 1
-    extern void spindle_select_init(void);
-    spindle_select_init();
-#endif
-
 #ifndef GRBL_ESP32 // ESP32 has its own bluetooth_init
 #if BLUETOOTH_ENABLE
     extern void bluetooth_init (void);
@@ -90,8 +85,18 @@
     webui_init();
 #endif
 
+#if EMBROIDERY_ENABLE
+    extern void embroidery_init (void);
+    embroidery_init();
+#endif
+
     extern void my_plugin_init (void);
     my_plugin_init();
+
+#if N_SPINDLE > 1
+    extern void spindle_select_init(void);
+    spindle_select_init();
+#endif
 
 // Third party plugin definitions.
 // The code for these has to be downloaded from the source and placed in the same folder as driver.c
@@ -106,6 +111,11 @@
 #if PROBE_RELAY_ENABLE
     extern void probe_relay_init (void);
     probe_relay_init();
+#endif
+
+#if DISPLAY_ENABLE
+    void display_init (void);
+    display_init();
 #endif
 
 #if STATUS_LIGHT_ENABLE

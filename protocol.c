@@ -61,7 +61,7 @@ static char xcommand[LINE_BUFFER_SIZE];
 static bool keep_rt_commands = false;
 static realtime_queue_t realtime_queue = {0};
 
-static void protocol_exec_rt_suspend ();
+static void protocol_exec_rt_suspend (sys_state_t state);
 static void protocol_execute_rt_commands (void);
 
 // add gcode to execute not originating from normal input stream
@@ -180,7 +180,7 @@ bool protocol_main_loop (void)
 
     // Ensure spindle and coolant is switched off on a cold start
     if(sys.cold_start) {
-        hal.spindle.set_state((spindle_state_t){0}, 0.0f);
+        spindle_all_off();
         hal.coolant.set_state((coolant_state_t){0});
         if(realtime_queue.head != realtime_queue.tail)
             system_set_exec_state_flag(EXEC_RT_COMMAND);  // execute any boot up commands
@@ -239,14 +239,14 @@ bool protocol_main_loop (void)
                 // Direct and execute one line of formatted input, and report status of execution.
                 if (line_flags.overflow) // Report line overflow error.
                     gc_state.last_error = Status_Overflow;
-                else if(line[0] == '\0') // Empty line. For syncing purposes.
+                else if(*line == '\0') // Empty line. For syncing purposes.
                     gc_state.last_error = Status_OK;
-                else if (line[0] == '$') {// Grbl '$' system command
+                else if(*line == '$') {// Grbl '$' system command
                     if((gc_state.last_error = system_execute_line(line)) == Status_LimitsEngaged) {
                         system_raise_alarm(Alarm_LimitsEngaged);
                         grbl.report.feedback_message(Message_CheckLimits);
                     }
-                } else if (line[0] == '[' && grbl.on_user_command)
+                } else if(*line == '[' && grbl.on_user_command)
                     gc_state.last_error = grbl.on_user_command(line);
                 else if (state_get() & (STATE_ALARM|STATE_ESTOP|STATE_JOG)) // Everything else is gcode. Block if in alarm, eStop or jog mode.
                     gc_state.last_error = Status_SystemGClock;
@@ -267,14 +267,16 @@ bool protocol_main_loop (void)
                 if(state_get() == STATE_CHECK_MODE)
                     hal.delay_ms(CHECK_MODE_DELAY, NULL);
 #endif
-
-                grbl.report.status_message(gc_state.last_error);
+                if(ABORTED)
+                    break;
+                else
+                    grbl.report.status_message(gc_state.last_error);
 
                 // Reset tracking data for next line.
                 keep_rt_commands = false;
                 char_counter = line_flags.value = 0;
 
-            } else if (c <= (char_counter > 0 ? ' ' - 1 : ' '))
+            } else if (c != ASCII_BS && c <= (char_counter > 0 ? ' ' - 1 : ' '))
                 continue; // Strip control characters and leading whitespace.
             else {
                 switch(c) {
@@ -302,6 +304,7 @@ bool protocol_main_loop (void)
                         }
                         break;
 
+                    case ASCII_BS:
                     case ASCII_DEL:
                         if(char_counter) {
                             line[--char_counter] = '\0';
@@ -386,16 +389,40 @@ bool protocol_execute_realtime (void)
 {
     if(protocol_exec_rt_system()) {
 
-        if (sys.suspend)
-            protocol_exec_rt_suspend();
+        sys_state_t state = state_get();
 
-      #if NVSDATA_BUFFER_ENABLE
-        if((state_get() == STATE_IDLE || (state_get() & (STATE_ALARM|STATE_ESTOP))) && settings_dirty.is_dirty && !gc_state.file_run)
+        if(sys.suspend)
+            protocol_exec_rt_suspend(state);
+
+#if NVSDATA_BUFFER_ENABLE
+        if((state == STATE_IDLE || (state & (STATE_ALARM|STATE_ESTOP))) && settings_dirty.is_dirty && !gc_state.file_run)
             nvs_buffer_sync_physical();
-      #endif
+#endif
     }
 
     return !ABORTED;
+}
+
+static void protocol_poll_cmd (void)
+{
+    int16_t c;
+
+    if((c = hal.stream.read()) != SERIAL_NO_DATA) {
+
+        if ((c == '\n') || (c == '\r')) { // End of line reached
+            line[char_counter] = '\0';
+            gc_state.last_error = *line == '\0' ? Status_OK : (*line == '$' ? system_execute_line(line) : Status_SystemGClock);
+            char_counter = 0;
+            *line = '\0';
+            grbl.report.status_message(gc_state.last_error);
+        } else if(c == ASCII_DEL || c == ASCII_BS) {
+            if(char_counter)
+                line[--char_counter] = '\0';
+        } else if(char_counter == 0 ? c != ' ' : char_counter < (LINE_BUFFER_SIZE - 1))
+            line[char_counter++] = c;
+
+        keep_rt_commands = char_counter > 0 && *line == '$';
+    }
 }
 
 // Executes run-time commands, when required. This function primarily operates as Grbl's state
@@ -411,7 +438,7 @@ bool protocol_exec_rt_system (void)
         if((sys.reset_pending = !!(sys.rt_exec_state & EXEC_RESET))) {
             // Kill spindle and coolant.
             killed = true;
-            hal.spindle.set_state((spindle_state_t){0}, 0.0f);
+            spindle_all_off();
             hal.coolant.set_state((coolant_state_t){0});
         }
 
@@ -424,11 +451,13 @@ bool protocol_exec_rt_system (void)
             hal.driver_reset();
 
         // Halt everything upon a critical event flag. Currently hard and soft limits flag this.
-        if ((alarm_code_t)rt_exec == Alarm_HardLimit ||
-            (alarm_code_t)rt_exec == Alarm_SoftLimit ||
-             (alarm_code_t)rt_exec == Alarm_EStop ||
-              (alarm_code_t)rt_exec == Alarm_MotorFault) {
+        if((sys.blocking_event = (alarm_code_t)rt_exec == Alarm_HardLimit ||
+                                  (alarm_code_t)rt_exec == Alarm_SoftLimit ||
+                                   (alarm_code_t)rt_exec == Alarm_EStop ||
+                                    (alarm_code_t)rt_exec == Alarm_MotorFault)) {
+
             system_set_exec_alarm(rt_exec);
+
             switch((alarm_code_t)rt_exec) {
 
                 case Alarm_EStop:
@@ -443,20 +472,30 @@ bool protocol_exec_rt_system (void)
                     grbl.report.feedback_message(Message_CriticalEvent);
                     break;
             }
+
             system_clear_exec_state_flag(EXEC_RESET); // Disable any existing reset
+
+            *line = '\0';
+            char_counter = 0;
+            hal.stream.reset_read_buffer();
+
             while (bit_isfalse(sys.rt_exec_state, EXEC_RESET)) {
+
                 // Block everything, except reset and status reports, until user issues reset or power
                 // cycles. Hard limits typically occur while unattended or not paying attention. Gives
                 // the user and a GUI time to do what is needed before resetting, like killing the
                 // incoming stream. The same could be said about soft limits. While the position is not
                 // lost, continued streaming could cause a serious crash if by chance it gets executed.
+
                 if(bit_istrue(sys.rt_exec_state, EXEC_STATUS_REPORT)) {
                     system_clear_exec_state_flag(EXEC_STATUS_REPORT);
                     report_realtime_status();
                 }
 
+                protocol_poll_cmd();
                 grbl.on_execute_realtime(STATE_ESTOP);
             }
+
             system_clear_exec_alarm(); // Clear alarm
         }
     }
@@ -468,7 +507,7 @@ bool protocol_exec_rt_system (void)
 
             if(!killed) {
                 // Kill spindle and coolant.
-                hal.spindle.set_state((spindle_state_t){0}, 0.0f);
+                spindle_all_off();
                 hal.coolant.set_state((coolant_state_t){0});
             }
 
@@ -495,16 +534,12 @@ bool protocol_exec_rt_system (void)
             sys.cancel = true;
             sys.step_control.flags = 0;
             sys.flags.feed_hold_pending = Off;
-            sys.flags.delay_overrides = Off;
+            sys.override_delay.flags = 0;
             if(sys.override.control.sync)
                 sys.override.control = gc_state.modal.override_ctrl;
 
             gc_state.tool_change = false;
-            gc_state.modal.spindle_rpm_mode = SpindleSpeedMode_RPM;
-
-            // Kill spindle and coolant. TODO: Check Mach3 behaviour?
-            gc_spindle_off();
-            gc_coolant_off();
+            gc_state.modal.spindle.rpm_mode = SpindleSpeedMode_RPM;
 
             // Tell driver/plugins about reset.
             hal.driver_reset();
@@ -523,6 +558,11 @@ bool protocol_exec_rt_system (void)
             } else*/
             st_reset();
             sync_position();
+
+            // Kill spindle and coolant. TODO: Check Mach3 behaviour?
+            gc_spindle_off();
+            gc_coolant_off();
+
             flush_override_buffers();
             if(!((state_get() == STATE_ALARM) && (sys.alarm == Alarm_LimitsEngaged || sys.alarm == Alarm_HomingRequried)))
                 state_set(hal.control.get_state().safety_door_ajar ? STATE_SAFETY_DOOR : STATE_IDLE);
@@ -561,136 +601,152 @@ bool protocol_exec_rt_system (void)
 
     grbl.on_execute_realtime(state_get());
 
-    if(!sys.flags.delay_overrides) {
+    // Execute overrides.
 
-        // Execute overrides.
+    if(!sys.override_delay.feedrate && (rt_exec = get_feed_override())) {
 
-        if((rt_exec = get_feed_override())) {
+        override_t new_f_override = sys.override.feed_rate;
+        override_t new_r_override = sys.override.rapid_rate;
 
-            int_fast16_t new_f_override = sys.override.feed_rate;
-            uint_fast8_t new_r_override = sys.override.rapid_rate;
+        do {
 
-            do {
+            switch(rt_exec) {
 
-                switch(rt_exec) {
+                case CMD_OVERRIDE_FEED_RESET:
+                    new_f_override = DEFAULT_FEED_OVERRIDE;
+                    break;
 
-                    case CMD_OVERRIDE_FEED_RESET:
-                        new_f_override = DEFAULT_FEED_OVERRIDE;
-                        break;
+                case CMD_OVERRIDE_FEED_COARSE_PLUS:
+                    new_f_override += FEED_OVERRIDE_COARSE_INCREMENT;
+                    break;
 
-                    case CMD_OVERRIDE_FEED_COARSE_PLUS:
-                        new_f_override += FEED_OVERRIDE_COARSE_INCREMENT;
-                        break;
+                case CMD_OVERRIDE_FEED_COARSE_MINUS:
+                    new_f_override -= FEED_OVERRIDE_COARSE_INCREMENT;
+                    break;
 
-                    case CMD_OVERRIDE_FEED_COARSE_MINUS:
-                        new_f_override -= FEED_OVERRIDE_COARSE_INCREMENT;
-                        break;
+                case CMD_OVERRIDE_FEED_FINE_PLUS:
+                    new_f_override += FEED_OVERRIDE_FINE_INCREMENT;
+                    break;
 
-                    case CMD_OVERRIDE_FEED_FINE_PLUS:
-                        new_f_override += FEED_OVERRIDE_FINE_INCREMENT;
-                        break;
+                case CMD_OVERRIDE_FEED_FINE_MINUS:
+                    new_f_override -= FEED_OVERRIDE_FINE_INCREMENT;
+                    break;
 
-                    case CMD_OVERRIDE_FEED_FINE_MINUS:
-                        new_f_override -= FEED_OVERRIDE_FINE_INCREMENT;
-                        break;
+                case CMD_OVERRIDE_RAPID_RESET:
+                    new_r_override = DEFAULT_RAPID_OVERRIDE;
+                    break;
 
-                    case CMD_OVERRIDE_RAPID_RESET:
-                        new_r_override = DEFAULT_RAPID_OVERRIDE;
-                        break;
+                case CMD_OVERRIDE_RAPID_MEDIUM:
+                    new_r_override = RAPID_OVERRIDE_MEDIUM;
+                    break;
 
-                    case CMD_OVERRIDE_RAPID_MEDIUM:
-                        new_r_override = RAPID_OVERRIDE_MEDIUM;
-                        break;
-
-                    case CMD_OVERRIDE_RAPID_LOW:
-                        new_r_override = RAPID_OVERRIDE_LOW;
-                        break;
-                }
-
-                new_f_override = constrain(new_f_override, MIN_FEED_RATE_OVERRIDE, MAX_FEED_RATE_OVERRIDE);
-
-            } while((rt_exec = get_feed_override()));
-
-            plan_feed_override((uint_fast8_t)new_f_override, new_r_override);
-        }
-
-        if((rt_exec = get_accessory_override())) {
-
-            bool spindle_stop = false;
-            int_fast16_t last_s_override = sys.override.spindle_rpm;
-            coolant_state_t coolant_state = gc_state.modal.coolant;
-
-            do {
-
-                switch(rt_exec) {
-
-                    case CMD_OVERRIDE_SPINDLE_RESET:
-                        last_s_override = DEFAULT_SPINDLE_RPM_OVERRIDE;
-                        break;
-
-                    case CMD_OVERRIDE_SPINDLE_COARSE_PLUS:
-                        last_s_override += SPINDLE_OVERRIDE_COARSE_INCREMENT;
-                        break;
-
-                    case CMD_OVERRIDE_SPINDLE_COARSE_MINUS:
-                        last_s_override -= SPINDLE_OVERRIDE_COARSE_INCREMENT;
-                        break;
-
-                    case CMD_OVERRIDE_SPINDLE_FINE_PLUS:
-                        last_s_override += SPINDLE_OVERRIDE_FINE_INCREMENT;
-                        break;
-
-                    case CMD_OVERRIDE_SPINDLE_FINE_MINUS:
-                        last_s_override -= SPINDLE_OVERRIDE_FINE_INCREMENT;
-                        break;
-
-                    case CMD_OVERRIDE_SPINDLE_STOP:
-                        spindle_stop = !spindle_stop;
-                        break;
-
-                    case CMD_OVERRIDE_COOLANT_MIST_TOGGLE:
-                        if (hal.driver_cap.mist_control && ((state_get() == STATE_IDLE) || (state_get() & (STATE_CYCLE | STATE_HOLD)))) {
-                            coolant_state.mist = !coolant_state.mist;
-                        }
-                        break;
-
-                    case CMD_OVERRIDE_COOLANT_FLOOD_TOGGLE:
-                        if ((state_get() == STATE_IDLE) || (state_get() & (STATE_CYCLE | STATE_HOLD))) {
-                            coolant_state.flood = !coolant_state.flood;
-                        }
-                        break;
-
-                    default:
-                        if(grbl.on_unknown_accessory_override)
-                            grbl.on_unknown_accessory_override(rt_exec);
-                        break;
-                }
-
-                last_s_override = constrain(last_s_override, MIN_SPINDLE_RPM_OVERRIDE, MAX_SPINDLE_RPM_OVERRIDE);
-
-            } while((rt_exec = get_accessory_override()));
-
-            spindle_set_override((uint_fast8_t)last_s_override);
-
-          // NOTE: Since coolant state always performs a planner sync whenever it changes, the current
-          // run state can be determined by checking the parser state.
-            if(coolant_state.value != gc_state.modal.coolant.value) {
-                coolant_set_state(coolant_state); // Report flag set in coolant_set_state().
-                gc_state.modal.coolant = coolant_state;
-                if(grbl.on_override_changed)
-                    grbl.on_override_changed(OverrideChanged_CoolantState);
+                case CMD_OVERRIDE_RAPID_LOW:
+                    new_r_override = RAPID_OVERRIDE_LOW;
+                    break;
             }
 
-            if (spindle_stop && state_get() == STATE_HOLD && gc_state.modal.spindle.on) {
-                // Spindle stop override allowed only while in HOLD state.
-                // NOTE: Report flag is set in spindle_set_state() when spindle stop is executed.
-                if (!sys.override.spindle_stop.value)
-                    sys.override.spindle_stop.initiate = On;
-                else if (sys.override.spindle_stop.enabled)
-                    sys.override.spindle_stop.restore = On;
+            new_f_override = constrain(new_f_override, MIN_FEED_RATE_OVERRIDE, MAX_FEED_RATE_OVERRIDE);
+
+        } while((rt_exec = get_feed_override()));
+
+        plan_feed_override(new_f_override, new_r_override);
+    }
+
+    if(!sys.override_delay.spindle && (rt_exec = get_spindle_override())) {
+
+        bool spindle_stop = false;
+        spindle_ptrs_t *spindle = gc_spindle_get();
+        override_t last_s_override = spindle->param->override_pct;
+
+        do {
+
+            switch(rt_exec) {
+
+                case CMD_OVERRIDE_SPINDLE_RESET:
+                    last_s_override = DEFAULT_SPINDLE_RPM_OVERRIDE;
+                    break;
+
+                case CMD_OVERRIDE_SPINDLE_COARSE_PLUS:
+                    last_s_override += SPINDLE_OVERRIDE_COARSE_INCREMENT;
+                    break;
+
+                case CMD_OVERRIDE_SPINDLE_COARSE_MINUS:
+                    last_s_override -= SPINDLE_OVERRIDE_COARSE_INCREMENT;
+                    break;
+
+                case CMD_OVERRIDE_SPINDLE_FINE_PLUS:
+                    last_s_override += SPINDLE_OVERRIDE_FINE_INCREMENT;
+                    break;
+
+                case CMD_OVERRIDE_SPINDLE_FINE_MINUS:
+                    last_s_override -= SPINDLE_OVERRIDE_FINE_INCREMENT;
+                    break;
+
+                case CMD_OVERRIDE_SPINDLE_STOP:
+                    spindle_stop = !spindle_stop;
+                    break;
+
+                default:
+                    if(grbl.on_unknown_accessory_override)
+                        grbl.on_unknown_accessory_override(rt_exec);
+                    break;
             }
+
+            last_s_override = constrain(last_s_override, MIN_SPINDLE_RPM_OVERRIDE, MAX_SPINDLE_RPM_OVERRIDE);
+
+        } while((rt_exec = get_spindle_override()));
+
+        spindle_set_override(spindle, last_s_override);
+
+        if (spindle_stop && state_get() == STATE_HOLD && gc_state.modal.spindle.state.on) {
+            // Spindle stop override allowed only while in HOLD state.
+            // NOTE: Report flag is set in spindle_set_state() when spindle stop is executed.
+            if (!sys.override.spindle_stop.value)
+                sys.override.spindle_stop.initiate = On;
+            else if (sys.override.spindle_stop.enabled)
+                sys.override.spindle_stop.restore = On;
         }
-    } // End execute overrides.
+    }
+
+    if(!sys.override_delay.coolant && (rt_exec = get_coolant_override())) {
+
+        coolant_state_t coolant_state = gc_state.modal.coolant;
+
+        do {
+
+            switch(rt_exec) {
+
+                case CMD_OVERRIDE_COOLANT_MIST_TOGGLE:
+                    if (hal.driver_cap.mist_control && ((state_get() == STATE_IDLE) || (state_get() & (STATE_CYCLE | STATE_HOLD)))) {
+                        coolant_state.mist = !coolant_state.mist;
+                    }
+                    break;
+
+                case CMD_OVERRIDE_COOLANT_FLOOD_TOGGLE:
+                    if ((state_get() == STATE_IDLE) || (state_get() & (STATE_CYCLE | STATE_HOLD))) {
+                        coolant_state.flood = !coolant_state.flood;
+                    }
+                    break;
+
+                default:
+                    if(grbl.on_unknown_accessory_override)
+                        grbl.on_unknown_accessory_override(rt_exec);
+                    break;
+            }
+
+        } while((rt_exec = get_coolant_override()));
+
+      // NOTE: Since coolant state always performs a planner sync whenever it changes, the current
+      // run state can be determined by checking the parser state.
+        if(coolant_state.value != gc_state.modal.coolant.value) {
+            coolant_set_state(coolant_state); // Report flag set in coolant_set_state().
+            gc_state.modal.coolant = coolant_state;
+            if(grbl.on_override_changed)
+                grbl.on_override_changed(OverrideChanged_CoolantState);
+        }
+    }
+
+    // End execute overrides.
 
     // Reload step segment buffer
     if (state_get() & (STATE_CYCLE | STATE_HOLD | STATE_SAFETY_DOOR | STATE_HOMING | STATE_SLEEP| STATE_JOG))
@@ -704,12 +760,21 @@ bool protocol_exec_rt_system (void)
 // whatever function that invoked the suspend, such that Grbl resumes normal operation.
 // This function is written in a way to promote custom parking motions. Simply use this as a
 // template.
-static void protocol_exec_rt_suspend (void)
+static void protocol_exec_rt_suspend (sys_state_t state)
 {
-    while (sys.suspend) {
+    if((sys.blocking_event = state == STATE_SLEEP)) {
+        *line = '\0';
+        char_counter = 0;
+        hal.stream.reset_read_buffer();
+    }
 
-        if (sys.abort)
+    while(sys.suspend) {
+
+        if(sys.abort)
             return;
+
+        if(sys.blocking_event)
+            protocol_poll_cmd();
 
         // Handle spindle overrides during suspend
         state_suspend_manager();
@@ -771,10 +836,13 @@ ISR_CODE bool ISR_FUNC(protocol_enqueue_realtime_command)(char c)
 
         case CMD_STATUS_REPORT_ALL: // Add all statuses to report
             {
-                bool tlo = sys.report.tool_offset;
-                sys.report.value = (uint32_t)-1;
-                sys.report.tool_offset = tlo;
-                sys.report.m66result = sys.var5399 > -2;
+                report_tracking_flags_t report;
+
+                report.value = (uint32_t)Report_All;
+                report.tool_offset = sys.report.tool_offset;
+                report.m66result = sys.var5399 > -2;
+
+                system_add_rt_report((report_tracking_t)report.value);
             }
             system_set_exec_state_flag(EXEC_STATUS_REPORT);
             drop = true;
@@ -871,11 +939,15 @@ ISR_CODE bool ISR_FUNC(protocol_enqueue_realtime_command)(char c)
         case CMD_OVERRIDE_SPINDLE_FINE_PLUS:
         case CMD_OVERRIDE_SPINDLE_FINE_MINUS:
         case CMD_OVERRIDE_SPINDLE_STOP:
+            drop = true;
+            enqueue_spindle_override((uint8_t)c);
+            break;
+
         case CMD_OVERRIDE_COOLANT_FLOOD_TOGGLE:
         case CMD_OVERRIDE_COOLANT_MIST_TOGGLE:
         case CMD_OVERRIDE_FAN0_TOGGLE:
             drop = true;
-            enqueue_accessory_override((uint8_t)c);
+            enqueue_coolant_override((uint8_t)c);
             break;
 
         case CMD_REBOOT:
@@ -884,7 +956,7 @@ ISR_CODE bool ISR_FUNC(protocol_enqueue_realtime_command)(char c)
             break;
 
         default:
-            if(c < ' ' || (c > ASCII_DEL && c <= 0xBF))
+            if((c < ' ' && c != ASCII_BS) || (c > ASCII_DEL && c <= 0xBF))
                 drop = grbl.on_unknown_realtime_cmd == NULL || grbl.on_unknown_realtime_cmd(c);
             break;
     }
