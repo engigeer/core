@@ -1,6 +1,70 @@
 ## grblHAL changelog
 
-<a name="20230501"/>20230501
+<a name="20230521"/>20230521
+
+Drivers:
+
+* RP2040: added build support for WIZnet ethernet breakouts \(W5500 and W5100S\).
+
+* iMXRT1062, SAM3X8E, SAMD21: fix for C++ serial code compilation issue.
+
+---
+
+<a name="20230519"/>Build 20230519
+
+Core:
+
+* Extended handling of legacy printable real-time commands due to ESP32 RTOS issue.
+* Internal changes to crossbar definitions, improved stream handling and sleep handling.
+
+Plugins:
+
+* Networking: added support for some WIZnet SPI based ethernet breakout boards, currently only W5100S and W5500. Updated for core changes.
+
+Drivers:
+
+* STM32F4xx: added low level driver support for WIZnet SPI based ethernet breakout boards, updated SPI interface for DMA transfer.
+
+* RP2040: added low level driver support for WIZnet SPI based ethernet breakout boards, updated SPI interface for DMA transfer. 
+__NOTE:__ Build support for ethernet is not yet ready!
+
+* TI SimpleLink base, TM4C123, MSP432P401R, STM32F4xx, LPC176x, RP2040: added minimum delay from stepper enable to first step pulse.
+
+Web Builder:
+
+Added options for spindle sync and WIZnet networking for relevant driver and boards combinations.
+
+---
+
+<a name="20230507"/> Build 20230507
+
+Core:
+
+* Added experimental support for [G65 and M99](https://github.com/grblHAL/core/wiki/Additional-G--and-M-codes#codes-available-if-driver-or-plugins-supports-them), call and return from macro.
+
+Drivers:
+
+* ESP32: Fix for [issue #73](https://github.com/grblHAL/ESP32/issues/73) - spindle not disabled on reset/stop.
+
+* RP2040: Added Bluetooth support for Pico W. [Discussion #61](https://github.com/grblHAL/RP2040/discussions/61).
+
+* Some: updated for more flexible Bluetooth configuration.
+
+Plugins:
+
+* SD card and macros: added low-level support for G65.
+
+---
+
+<a name="20230502"/>20230502
+
+Plugins:
+
+WebUI: fixes for [issue #6](https://github.com/grblHAL/Plugin_networking/issues/6) - block disabling of websocket daemon from WebUI v3 and [issue #11](https://github.com/grblHAL/Plugin_WebUI/issues/11) - SSDP failure \(with ESP32 in SoftAP mode\).
+
+---
+
+<a name="20230501"/>Build 20230501
 
 Core: 
 
