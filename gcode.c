@@ -33,6 +33,7 @@
 #if NGC_EXPRESSIONS_ENABLE
 #include "ngc_expr.h"
 #include "ngc_params.h"
+#include "ngc_flowctrl.h"
 #endif
 
 // NOTE: Max line number is defined by the g-code standard to be 99999. It seems to be an
@@ -324,6 +325,10 @@ void gc_init (void)
                                  !is0_position_vector(gc_state.g92_coord_offset)))
         grbl.on_wco_changed();
 
+#if NGC_EXPRESSIONS_ENABLE
+    ngc_flowctrl_init();
+#endif
+
 //    if(settings.flags.lathe_mode)
 //        gc_state.modal.plane_select = PlaneSelect_ZX;
 }
@@ -418,6 +423,55 @@ static void output_message (char *message)
     free(message);
 }
 
+#if NGC_EXPRESSIONS_ENABLE
+
+#define NGC_N_ASSIGN_PARAMETERS_PER_BLOCK 10
+
+static ngc_param_t ngc_params[NGC_N_ASSIGN_PARAMETERS_PER_BLOCK];
+
+static status_code_t read_parameter (char *line, uint_fast8_t *char_counter, float *value)
+{
+    char c = *(line + *char_counter);
+    status_code_t status = Status_OK;
+
+    if(c == '#') {
+
+        (*char_counter)++;
+
+        if(*(line + *char_counter) == '<') {
+
+            (*char_counter)++;
+            char *pos = line + *char_counter;
+
+            while(*line && *line != '>')
+                line++;
+
+            *char_counter += line - pos + 1;
+
+            if(*line == '>') {
+                *line = '\0';
+                if(!ngc_named_param_get(pos, value))
+                    status = Status_BadNumberFormat;
+                *line = '>';
+            } else
+                status = Status_BadNumberFormat;
+
+        } else if (read_float(line, char_counter, value)) {
+            if(!ngc_param_get((ngc_param_id_t)*value, value))
+                status = Status_BadNumberFormat;
+        } else
+            status = Status_BadNumberFormat;
+
+    } else if(c == '[')
+        status = ngc_eval_expression(line, char_counter, value);
+    else if(!read_float(line, char_counter, value))
+        *value = NAN;
+
+    return status;
+}
+
+#endif // NGC_EXPRESSIONS_ENABLE
+
 // Remove whitespace, control characters, comments and if block delete is active block delete lines
 // else the block delete character. Remaining characters are converted to upper case.
 // If the driver handles message comments then the first is extracted and returned in a dynamically
@@ -458,20 +512,78 @@ char *gc_normalize_block (char *block, char **message)
                 break;
 
             case ')':
-                if(comment) {
+                if(comment && !gc_state.skip_blocks) {
                     *s1 = '\0';
                     if(!hal.driver_cap.no_gcode_message_handling) {
+
                         size_t len = s1 - comment - 4;
+
                         if(message && *message == NULL && !strncmp(comment, "(MSG,", 5) && (*message = malloc(len))) {
                             comment += 5;
-                            // trim leading spaces
+                            // Trim leading spaces
                             while(*comment == ' ') {
                                 comment++;
                                 len--;
                             }
                             memcpy(*message, comment, len);
                         }
+
+#if NGC_EXPRESSIONS_ENABLE
+                        // Debug message string substitution
+                        if(message && *message == NULL && !strncmp(comment, "(DEBUG,", 7)) {
+
+                            if(settings.flags.ngc_debug_out) {
+
+                                float value;
+                                char *s3;
+                                uint_fast8_t char_counter = 0;
+
+                                len = 0;
+                                comment += 7;
+
+                                // Trim leading spaces
+                                while(*comment == ' ')
+                                    comment++;
+
+                                // Calculate length of substituted string
+                                while((c = comment[char_counter++])) {
+                                    if(c == '#') {
+                                        char_counter--;
+                                        if(read_parameter(comment, &char_counter, &value) == Status_OK)
+                                            len += strlen(ftoa(value, 6));
+                                        else
+                                            len += 3; // "N/A"
+                                    } else
+                                        len++;
+                                }
+
+                                // Perform substitution
+                                if((s3 = *message = malloc(len + 1))) {
+
+                                    *s3 = '\0';
+                                    char_counter = 0;
+
+                                    while((c = comment[char_counter++])) {
+                                        if(c == '#') {
+                                            char_counter--;
+                                            if(read_parameter(comment, &char_counter, &value) == Status_OK)
+                                                strcat(s3, ftoa(value, 6));
+                                            else
+                                                strcat(s3, "N/A");
+                                            s3 = strchr(s3, '\0');
+                                        } else {
+                                            *s3++ = c;
+                                            *s3 = '\0';
+                                        }
+                                    }
+                                }
+                            }
+
+                            *comment = '\0'; // Do not generate grbl.on_gcode_comment event!
+                        }
+#endif // NGC_EXPRESSIONS_ENABLE
                     }
+
                     if(*comment && *message == NULL && grbl.on_gcode_comment)
                         grbl.on_gcode_comment(comment);
                 }
@@ -484,9 +596,13 @@ char *gc_normalize_block (char *block, char **message)
                 break;
         }
 
+#if NGC_EXPRESSIONS_ENABLE
+        if(comment && s1 - comment < (strncmp(comment, "(DEBU,", 5) ? 5 : 7))
+            *s1 = CAPS(c);
+#else
         if(comment && s1 - comment < 5)
             *s1 = CAPS(c);
-
+#endif
         s1++;
     }
 
@@ -494,54 +610,6 @@ char *gc_normalize_block (char *block, char **message)
 
     return block;
 }
-
-#if NGC_EXPRESSIONS_ENABLE
-
-#define NGC_N_ASSIGN_PARAMETERS_PER_BLOCK 10
-
-static ngc_param_t ngc_params[NGC_N_ASSIGN_PARAMETERS_PER_BLOCK];
-
-static status_code_t read_parameter (char *line, uint_fast8_t *char_counter, float *value)
-{
-    char c = *(line + *char_counter);
-    status_code_t status = Status_OK;
-
-    if(c == '#') {
-
-        (*char_counter)++;
-
-        if(*(line + *char_counter) == '<') {
-
-            (*char_counter)++;
-            char *pos = line + *char_counter;
-
-            while(*line && *line != '>')
-                line++;
-
-            *char_counter += line - pos + 1;
-
-            if(*line == '>') {
-                *line = '\0';
-                if(!ngc_named_param_get(pos, value))
-                    status = Status_BadNumberFormat;
-            } else
-                status = Status_BadNumberFormat;
-
-        } else if (read_float(line, char_counter, value)) {
-            if(!ngc_param_get((ngc_param_id_t)*value, value))
-                status = Status_BadNumberFormat;
-        } else
-            status = Status_BadNumberFormat;
-
-    } else if(c == '[')
-        status = ngc_eval_expression(line, char_counter, value);
-    else if(!read_float(line, char_counter, value))
-        *value = NAN;
-
-    return status;
-}
-
-#endif
 
 // Parses and executes one block (line) of 0-terminated G-Code.
 // In this function, all units and positions are converted and exported to internal functions
@@ -599,6 +667,10 @@ status_code_t gc_execute_block (char *block)
     static parser_block_t gc_block;
 
 #if NGC_EXPRESSIONS_ENABLE
+
+    static const parameter_words_t o_label = {
+        .o = On
+    };
 
     uint_fast8_t ngc_param_count = 0;
 
@@ -736,6 +808,9 @@ status_code_t gc_execute_block (char *block)
 
         if(letter == '#') {
 
+            if(gc_state.skip_blocks)
+                return Status_OK;
+
             if(block[char_counter] == '<') {
 
                 char *s = &block[++char_counter];
@@ -776,11 +851,19 @@ status_code_t gc_execute_block (char *block)
             continue;
         }
 
+        if((gc_block.words.mask & o_label.mask) && (gc_block.words.mask & ~o_label.mask) == 0) {
+            char_counter--;
+            return ngc_flowctrl(gc_block.values.o, block, &char_counter, &gc_state.skip_blocks);
+        }
+
         if((letter < 'A' && letter != '$') || letter > 'Z')
             FAIL(Status_ExpectedCommandLetter); // [Expected word letter]
 
         if((status = read_parameter(block, &char_counter, &value)) != Status_OK)
             return status;
+
+        if(gc_state.skip_blocks && letter != 'O')
+            return Status_OK;
 
         if(!is_user_mcode && isnanf(value))
             FAIL(Status_BadNumberFormat);   // [Expected word value]
@@ -3118,6 +3201,10 @@ status_code_t gc_execute_block (char *block)
 
         case NonModal_MacroCall:
             {
+#if NGC_EXPRESSIONS_ENABLE
+                ngc_named_param_set("_value", 0.0f);
+                ngc_named_param_set("_value_returned", 0.0f);
+#endif
                 status_code_t status = grbl.on_macro_execute((macro_id_t)gc_block.values.p);
 
                 return status == Status_Unhandled ? Status_GcodeValueOutOfRange : status;

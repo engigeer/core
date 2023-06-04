@@ -1,5 +1,67 @@
 ## grblHAL changelog
 
+<a name="20230601"/>Build 20230601
+
+Core:
+
+* Improved experimental support for [program flow control](https://github.com/grblHAL/core/wiki/Expressions-and-flow-control).
+
+Drivers:
+
+* STM32F4xx: added alternative Blackpill map with I2C support and optional spindle sync support. From [issue 121](https://github.com/grblHAL/STM32F4xx/issues/121#issuecomment-1569128257).
+
+* ESP32: Fixed typo in MKS Tinybee 1.0 map.
+
+Plugins:
+
+* SD Card: improved macro support.
+
+---
+
+<a name="20230529"/>Build 20230529
+
+Core:
+
+* Added experimental support for [program flow control](https://github.com/grblHAL/core/discussions/309), mainly available for use in [G65 macros](https://github.com/grblHAL/core/wiki/Additional-G--and-M-codes#codes-available-if-driver-or-plugins-supports-them) stored on SD card or in littlefs.
+
+Drivers:
+
+* STM32F4xx: fix for [issue #116](https://github.com/grblHAL/STM32F4xx/issues/116#issuecomment-1565369604), incorrect spindle RPM reported from encoder.
+
+---
+
+<a name="20230526"/>Build 20230526
+
+Core:
+
+* Expanded ioports API with generalized settings handling++.
+
+Drivers:
+
+* RP2040, iMXRT1062, STM32F4xx: added/updated low-level ioports driver layer for analog output \(PWM\). NOTE: not yet used by any board map files.
+
+* STM32F4xx: workaround for [issue #121](https://github.com/grblHAL/STM32F4xx/issues/121), settings write failure.
+
+* iMXRT1062, STM32F1xx, STM32F4xx, STM32F7xx: Improved frequency range for spindle PWM.
+
+Plugins:
+
+* Networking (WIZnet option): reduced memory footprint, [issue #7](https://github.com/grblHAL/Plugin_networking/issues/7).
+
+---
+
+<a name="20230525"/>Build 20230525
+
+Core:
+
+* Expanded ioports API with some configuration and PWM related functions.
+
+Drivers:
+
+* RP2040: added low-level ioports driver layer for analog output \(PWM\). NOTE: not yet used by any board map files.
+
+---
+
 <a name="20230521"/>20230521
 
 Drivers:
@@ -32,7 +94,7 @@ __NOTE:__ Build support for ethernet is not yet ready!
 
 Web Builder:
 
-Added options for spindle sync and WIZnet networking for relevant driver and boards combinations.
+* Added options for spindle sync and WIZnet networking for relevant driver and boards combinations.
 
 ---
 
