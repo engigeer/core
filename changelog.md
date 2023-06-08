@@ -1,5 +1,43 @@
 ## grblHAL changelog
 
+<a name="20230607"/>Build 20230607
+
+Core:
+
+* Added initial support for macro based automatic tool changes (ATC).  
+Currently macros has to be stored on a SD card or in littlefs and [expression support](https://github.com/grblHAL/core/wiki/Expressions-and-flow-control) has to be enabled.
+
+* Added core events for file system mount/unmount.
+
+Plugins:
+
+* SD Card, macro plugin: Implemented automatic hook to tool change functions when tool change macros are found in the root mount directory.  
+Tool change macro: _tc.macro_, called on `M6`. \(required\)  
+Tool select macro: _ts.macro_, called on `T`. \(optional\).  
+__NOTE:__ This functionality needs to be extensively tested by users having access to ATC hardware! [Discuss here](https://github.com/grblHAL/core/discussions/309).
+
+---
+
+<a name="20230606"/>Build 20230606
+
+Core:
+
+* Fixed regression related to CSS \(Constant Surface Speed for lathes\) mode.
+* Improved stream handling for native USB streams when another stream claims/releases full control.
+Depending on the driver some output, such as real-time reports, will now be sent to the USB stream if it is connected to a client \(detected by DTR signal asserted\).
+When a pendant is in control \(via the MPG interface\) the USB interface will no longer block transmission if it is the primary interface and no client is connected.
+
+Drivers:
+
+* iMXRT1061, RP2040, all STM32 drivers, SAM3X8E and LPC176x: added DTR signal state detection and handling for native USB streams.
+
+* STM32F4xx, STM32F7xx: fixed regression in spindle sync code.
+
+* STM32F7xx: added optional SD card lowlevel driver support for the SDIO four lane interface \(in addition to the single lane SPI interface\).
+Currently this is running in polling mode, will update to DMA mode later.
+
+---
+
 <a name="20230601"/>Build 20230601
 
 Core:
@@ -8,7 +46,7 @@ Core:
 
 Drivers:
 
-* STM32F4xx: added alternative Blackpill map with I2C support and optional spindle sync support. From [issue 121](https://github.com/grblHAL/STM32F4xx/issues/121#issuecomment-1569128257).
+* STM32F4xx: added alternative Blackpill map with I2C support and optional spindle sync support. From [issue #121](https://github.com/grblHAL/STM32F4xx/issues/121#issuecomment-1569128257).
 
 * ESP32: Fixed typo in MKS Tinybee 1.0 map.
 
