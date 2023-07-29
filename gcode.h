@@ -236,8 +236,10 @@ typedef enum {
     LaserPPI_Rate = 127,                //!< 127 - M127
     LaserPPI_PulseLength = 128,         //!< 128 - M128
     OpenPNP_SetAcceleration = 204,      //!< 204 - M204
-	RGB_Inspection_Light = 356,         //!< 356 - M356 // ** Collides with Plasma ** On = 1, Off = 2, RGB white LED inspection light in RGB Plugin
+    RGB_Inspection_Light = 356,         //!< 356 - M356
     OpenPNP_FinishMoves = 400,          //!< 400 - M400
+    Probe_Deploy = 401,                 //!< 401 - M401, Marlin format
+    Probe_Stow = 402,                   //!< 402 - M402, Marlin format
     OpenPNP_SettingsReset = 502,        //!< 502 - M502
     Trinamic_ModeToggle = 569,          //!< 569 - M569, Marlin format
     Trinamic_StepperCurrent = 906,      //!< 906 - M906, Marlin format

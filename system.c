@@ -140,8 +140,10 @@ ISR_CODE void ISR_FUNC(control_interrupt_handler)(control_signals_t signals)
                 }
             } else if (signals.feed_hold)
                 system_set_exec_state_flag(EXEC_FEED_HOLD);
-            else if (signals.cycle_start)
+            else if (signals.cycle_start) {
                 system_set_exec_state_flag(EXEC_CYCLE_START);
+                sys.report.cycle_start = settings.status_report.pin_state;
+            }
         }
     }
 }
@@ -1039,6 +1041,10 @@ void system_raise_alarm (alarm_code_t alarm)
         system_set_exec_alarm(alarm);
     else if(sys.alarm != alarm) {
         sys.alarm = alarm;
+        sys.blocking_event = sys.alarm == Alarm_HardLimit ||
+                              sys.alarm == Alarm_SoftLimit ||
+                               sys.alarm == Alarm_EStop ||
+                                sys.alarm == Alarm_MotorFault;
         state_set(alarm == Alarm_EStop ? STATE_ESTOP : STATE_ALARM);
         if(sys.driver_started || sys.alarm == Alarm_SelftestFailed)
             grbl.report.alarm_message(alarm);
