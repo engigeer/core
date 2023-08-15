@@ -986,8 +986,19 @@ void report_build_info (char *line, bool extended)
             if(hal.nvs.type == NVS_Emulated)
                 strcat(buf, "*");
             strcat(buf, nvs->type == NVS_Flash ? "FLASH" : (nvs->type == NVS_FRAM ? "FRAM" : "EEPROM"));
+            if(hal.nvs.size_max) {
+                strcat(buf, " ");
+                strcat(buf, uitoa(hal.nvs.size_max / 1024));
+                strcat(buf, "K");
+            }
             hal.stream.write(buf);
             hal.stream.write("]" ASCII_EOL);
+        }
+
+        if(hal.get_free_mem) {
+            hal.stream.write("[FREE MEMORY:");
+            hal.stream.write(uitoa(hal.get_free_mem() / 1024));
+            hal.stream.write("K]" ASCII_EOL);
         }
 
         if(hal.info) {
@@ -1311,7 +1322,15 @@ void report_realtime_status (void)
             hal.stream.write_all(buf);
         }
 
-        if(report.mpg_mode && hal.driver_cap.mpg_mode)
+#if COMPATIBILITY_LEVEL <= 1
+        if((report.all || report.mpg_mode) && settings.report_interval) {
+            hal.stream.write_all(sys.flags.auto_reporting ? "|AR:" : "|AR");
+            if(sys.flags.auto_reporting)
+                hal.stream.write_all(uitoa(settings.report_interval));
+        }
+#endif
+
+        if(report.mpg_mode)
             hal.stream.write_all(sys.mpg_mode ? "|MPG:1" : "|MPG:0");
 
         if(report.homed && (sys.homing.mask || settings.homing.flags.single_axis_commands || settings.homing.flags.manual)) {
@@ -1344,11 +1363,6 @@ void report_realtime_status (void)
 #if COMPATIBILITY_LEVEL <= 1
     if(report.all) {
         hal.stream.write_all("|FW:grblHAL");
-        if(settings.report_interval) {
-            hal.stream.write_all(sys.flags.auto_reporting ? "|AR:" : "|AR");
-            if(sys.flags.auto_reporting)
-                hal.stream.write_all(uitoa(settings.report_interval));
-        }
         if(sys.blocking_event)
             hal.stream.write_all("|$C:1");
     } else
