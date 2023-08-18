@@ -1,5 +1,33 @@
 ## grblHAL changelog
 
+<a name="20230816"/>20230816
+
+Plugins:
+
+* WebUI: updated to handle blank commands, used to clear any repeating grblHAL errors. Needs the [latest WebUI build](https://github.com/luc-github/ESP3D-WEBUI/issues/364).
+
+---
+
+<a name="20230815"/>Build 20230815
+
+Core:
+
+* Added setting $484, _Unlock required after E-stop cleared_ by reset, default on. From issue #337.
+
+* Fixed typo, added event `grbl.on_parser_init`.
+
+Drivers:
+
+* Many: replaced parts of aux I/O driver code with calls to shared code in core. Digital aux input inversion bug fix.
+
+* ESP32: fix for incorrect Web Builder option handling for macros plugin.
+
+Templates:
+
+* Added plugin for selecting secondary probe input connected to aux input.
+
+---
+
 <a name="20230810"/>Build 20230810
 
 Core:
@@ -10,9 +38,9 @@ Core:
 
 Drivers:
 
-RP2040: fix for [issue #70](https://github.com/grblHAL/RP2040/issues/70), incorrect handling of I2C/SPI interrupt claims. 
+* RP2040: fix for [issue #70](https://github.com/grblHAL/RP2040/issues/70), incorrect handling of I2C/SPI interrupt claims. 
 
-Many: updated EEPROM option definition to select capacity by Kbits for 1:1 match with chip marking.
+* Many: updated EEPROM option definition to select capacity by Kbits for 1:1 match with chip marking.
 
 ---
 
