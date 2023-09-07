@@ -77,7 +77,6 @@ void mc_sync_backlash_position (void)
 // in the planner and to let backlash compensation or canned cycle integration simple and direct.
 bool mc_line (float *target, plan_line_data_t *pl_data)
 {
-
 #ifdef KINEMATICS_API
     float feed_rate = pl_data->feed_rate;
     pl_data->rate_multiplier = 1.0;
@@ -86,12 +85,11 @@ bool mc_line (float *target, plan_line_data_t *pl_data)
 
     // If enabled, check for soft limit violations. Placed here all line motions are picked up
     // from everywhere in Grbl.
-    // NOTE: Block jog motions. Jogging is a special case and soft limits are handled independently.
-    if (!pl_data->condition.jog_motion && settings.limits.flags.soft_enabled)
-        limits_soft_check(target);
+    if(settings.limits.flags.soft_enabled)
+        limits_soft_check(target, pl_data->condition);
 
     // If in check gcode mode, prevent motion by blocking planner. Soft limits still work.
-    if (state_get() != STATE_CHECK_MODE && protocol_execute_realtime()) {
+    if(state_get() != STATE_CHECK_MODE && protocol_execute_realtime()) {
 
         // NOTE: Backlash compensation may be installed here. It will need direction info to track when
         // to insert a backlash line motion(s) before the intended line motion and will require its own
@@ -756,18 +754,20 @@ void mc_thread (plan_line_data_t *pl_data, float *position, gc_thread_data *thre
 }
 
 // Sets up valid jog motion received from g-code parser, checks for soft-limits, and executes the jog.
-status_code_t mc_jog_execute (plan_line_data_t *pl_data, parser_block_t *gc_block)
+status_code_t mc_jog_execute (plan_line_data_t *pl_data, parser_block_t *gc_block, float *position)
 {
     // Initialize planner data struct for jogging motions.
     // NOTE: Spindle and coolant are allowed to fully function with overrides during a jog.
     pl_data->feed_rate = gc_block->values.f;
-    pl_data->condition.no_feed_override = On;
-    pl_data->condition.jog_motion = On;
+    pl_data->condition.no_feed_override =
+    pl_data->condition.jog_motion =
+    pl_data->condition.target_valid =
+    pl_data->condition.target_validated = On;
     pl_data->line_number = gc_block->values.n;
 
     if(settings.limits.flags.jog_soft_limited)
-        system_apply_jog_limits(gc_block->values.xyz);
-    else if (settings.limits.flags.soft_enabled && !system_check_travel_limits(gc_block->values.xyz))
+        grbl.apply_jog_limits(gc_block->values.xyz, position);
+    else if(settings.limits.flags.soft_enabled && !grbl.check_travel_limits(gc_block->values.xyz, true))
         return Status_TravelExceeded;
 
     // Valid jog command. Plan, set state, and execute.
@@ -825,7 +825,7 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
         // Check and abort homing cycle, if hard limits are already enabled. Helps prevent problems
         // with machines with limits wired on both ends of travel to one limit pin.
         // TODO: Move the pin-specific LIMIT_BIT call to limits.c as a function.
-        if (settings.limits.flags.two_switches && hal.homing.get_state == hal.limits.get_state && limit_signals_merge(hal.limits.get_state()).value) {
+        if (settings.limits.flags.two_switches && hal.home_cap.a.mask == 0 && limit_signals_merge(hal.limits.get_state()).value) {
             mc_reset(); // Issue system reset and ensure spindle and coolant are shutdown.
             system_set_exec_alarm(Alarm_HardLimit);
             return Status_Unhandled;
@@ -858,8 +858,6 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
         protocol_enqueue_realtime_command(CMD_STATUS_REPORT);   // Force a status report and
         delay_sec(0.1f, DelayMode_Dwell);                       // delay a bit to get it sent (or perhaps wait a bit for a request?)
 #endif
-        hal.limits.enable(false, true); // Disable hard limits pin change register for cycle duration
-
         // Turn off spindle and coolant (and update parser state)
         if(spindle_is_on())
             gc_spindle_off();
@@ -890,7 +888,7 @@ status_code_t mc_homing_cycle (axes_signals_t cycle)
         // If hard limits feature enabled, re-enable hard limits pin change register after homing cycle.
         // NOTE: always call at end of homing regadless of setting, may be used to disable
         // sensorless homing or switch back to limit switches input (if different from homing switches)
-        hal.limits.enable(settings.limits.flags.hard_enabled, false);
+        hal.limits.enable(settings.limits.flags.hard_enabled, (axes_signals_t){0});
     }
 
     if(cycle.mask) {
