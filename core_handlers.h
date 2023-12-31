@@ -78,7 +78,9 @@ typedef struct {
 
 typedef bool (*enqueue_gcode_ptr)(char *data);
 typedef bool (*protocol_enqueue_realtime_command_ptr)(char c);
-typedef bool (*travel_limits_ptr)(float *target, bool is_cartesian);
+typedef bool (*travel_limits_ptr)(float *target, axes_signals_t axes, bool is_cartesian);
+typedef bool (*arc_limits_ptr)(coord_data_t *target, coord_data_t *position, point_2d_t center, float radius, plane_t plane, int32_t turns);
+
 typedef void (*jog_limits_ptr)(float *target, float *position);
 typedef bool (*home_machine_ptr)(axes_signals_t cycle, axes_signals_t auto_square);
 
@@ -124,9 +126,23 @@ typedef sys_commands_t *(*on_get_commands_ptr)(void);
 typedef status_code_t (*on_macro_execute_ptr)(macro_id_t macro); // macro implementations _must_ claim hal.stream.read to stream macros!
 typedef void (*on_macro_return_ptr)(void);
 
+typedef bool (*write_tool_data_ptr)(tool_data_t *tool_data);
+typedef bool (*read_tool_data_ptr)(tool_id_t tool_id, tool_data_t *tool_data);
+typedef bool (*clear_tool_data_ptr)(void);
+
+typedef struct {
+    uint32_t n_tools;
+    tool_data_t *tool;          //!< Array of tool data, size _must_ be n_tools + 1
+    read_tool_data_ptr read;
+    write_tool_data_ptr write;
+    clear_tool_data_ptr clear;
+} tool_table_t;
+
 typedef struct {
     // report entry points set by core at reset.
     report_t report;
+    //
+    tool_table_t tool_table;
     // grbl core events - may be subscribed to by drivers or by the core.
     on_parser_init_ptr on_parser_init;
     on_state_change_ptr on_state_change;
@@ -175,6 +191,7 @@ typedef struct {
     // core entry points - set up by core before driver_init() is called.
     home_machine_ptr home_machine;
     travel_limits_ptr check_travel_limits;
+    arc_limits_ptr check_arc_travel_limits;
     jog_limits_ptr apply_jog_limits;
     enqueue_gcode_ptr enqueue_gcode;
     enqueue_realtime_command_ptr enqueue_realtime_command;

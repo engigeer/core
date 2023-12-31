@@ -1,10 +1,329 @@
 ## grblHAL changelog
 
+<a name="20231229"/>Build 20231229
+
+Core:
+
+* Fixed regression that prevented builds with compatibiliy level set > 1.
+
+* Added `[SIGNALS:xxx]` element to the `$I` output, `xxx` uses the same letters as the `Pn:`
+element in the [real time report](https://github.com/grblHAL/core/wiki/Report-extensions#realtime-report) and list all available from the controller except limits inputs.
+
+Drivers:
+
+* Most: added new configuration options in _my_machine.h_ for assigning optional signals to aux input ports. These are:
+1. `SAFETY_DOOR_ENABLE` - bound to aux port in the map file for backwards comaptibility.
+2. `MOTOR_FAULT_ENABLE` - bound to aux port in the map file since a single MCU input might be routed to several external inputs.
+3. `MOTOR_WARNING_ENABLE` - bound to aux port in the map file since a single MCU input might be routed to several external inputs.
+4. `PROBE_DISCONNECT_ENABLE` - assigned from unused ports.
+5. `STOP_DISABLE_ENABLE` - assigned from unused ports.
+6. `BLOCK_DELETE_ENABLE` - assigned from unused ports.
+7. `SINGLE_BLOCK_ENABLE` - assigned from unused ports.
+8. `LIMITS_OVERRIDE_ENABLE` - assigned from unused ports. Always active low.
+
+If too many inputs are enabled assignment will fail silently for those who cannot be bound.  
+__NOTE:__ core functionality for some of these inputs might change after user input!  
+Tip: use the `$pins` command to output the mapping.
+
+* ESP32: moved board maps and board specific code to separate folder.
+
+---
+
+<a name="20231226"/>20231226
+
+Core:
+
+* Added setting and data field for network interface MAC address \(for WizNet interfaces, not used by the core\).
+
+Drivers:
+
+* ESP32: refactored UART driver code to use framework provided low-level calls instead of direct MCU register access.
+
+* RP2040: placed some WizNet interface code in RAM to improve performance.
+
+* STM32F4xx: removed stray debug code.  
+Changed pin allocation for WizNet ethernet over SPI for BTT SKR 2.0 board.
+Ref. core [discussion #415](https://github.com/grblHAL/core/discussions/415#).
+
+Plugins:
+
+* Networking: improved WizNet interrupt handling.   
+Added new optional setting, `$535`, for configuring WizNet interface MAC address.
+This _must_ be set to all but one when more than one WizNet controller is added to the network.  
+Tip: grab a MAC address from an unused device such as a router.  
+__NOTE:__ Network settings for controllers having a WizNet interface will be reset to default on upgrade.
+
+---
+
+<a name="20231222"/>Build 20231222
+
+Core:
+
+* Some minor fixes and changes.
+
+Drivers:
+
+* STM32F1xx: made timer assignments more flexible. Added support for PWM out on PB9. Ref. [core discussion 62](https://github.com/grblHAL/core/discussions/62).
+
+* STM32F4xx: fixed typos in SPI interface code for SPI3.
+
+Plugins:
+
+* Spindle: updated and verified code for second PWM spindle on top of aux outputs. Requires one PWM capable analog output and at least one digital.
+
+* Embroidery: no longer starts spindle if sync mode is disabled.
+
+---
+
+<a name="20231218"/>Build 20231218
+
+Core:
+
+* VFS: fix for incorrect handling of mode flags when mounting root filesystem. Added option to list hidden filesystems.
+
+Drivers:
+
+* ESP32: moved mount of littlefs filesystem until after settings are loaded.
+
+Plugins:
+
+* WebUI: improved handling of hidden littlefs filesystem.
+
+---
+
+<a name="20231217"/>20231217
+
+Drivers:
+
+* ESP32: reverted MKS DLC32 SD card SPI pins assignment, ref. [issue 88](https://github.com/grblHAL/ESP32/issues/88).  
+Fixed I2S stepping issues, added dir > step delay with 4 microseconds minimum delay. Ref. [issue 87](https://github.com/grblHAL/ESP32/issues/87).
+
+Plugins:
+
+* Motors: fixed some typos, ref. core [issue 381](https://github.com/grblHAL/core/issues/381#issuecomment-1859083977).
+
+---
+
+<a name="20231216"/>Build 20231216
+
+Core:
+
+* Refactored canned cycles to better match how LinuxCNC actually implements them. Ref. [ioSender issue 347](https://github.com/terjeio/ioSender/issues/347).  
+__NOTE:__ The implementation may still be incorrect - use with care!
+
+Drivers:
+
+* SAM3X8E: added laser plugins.
+
+* LPC176x: added laser and spindle plugins.
+
+---
+
+<a name="20231210"/>Build 20231210
+
+Core:
+
+* Spindle handling refactoring for improved management and configuration of multiple spindles.  
+__NOTE:__ this is a relatively large change and may have introduced bugs and/or unintended side-effects. Please report any issues!
+
+* Added setting `$519` for binding spindle encoder to given spindle in multi spindle configurations.
+
+* Added machine readable spindle enumeration report, `$SPINDLESH`.
+
+* Increased _default_ value for setting `$398` \(number of planner blocs\) from 35 to 100 for faster laser engraving.
+Ref. [this discussion](https://github.com/grblHAL/core/discussions/402).  
+__NOTE:__ the `$398` setting value will _not_ change on an upgrade!  
+__NOTE:__ STM32F103 builds for the 128K flash variants does not have enough free RAM and will keep 35 as the default value.
+
+* Increased allowed number of decimal places from 3 to 5 for `$10x` stepper step/mm settings.
+Ref. [ioSender issue 346](https://github.com/terjeio/ioSender/issues/346).  
+
+* Added setting `$650` for filing system options. Ref. [issue 397](https://github.com/grblHAL/core/issues/397).   
+Currently the following bits are available \(depending on the configuration\):  
+0 - Auto mount SD card on startup \(1\).  
+1 - Do not add littlefs files when listing the root directory \(2\).
+
+* Added build option for [lathe UVW mode](https://www.cnctrainingcentre.com/haas-turn/u-and-w-on-a-cnc-lathe-incremental-programming/).
+Ref [this discussion](https://github.com/grblHAL/core/discussions/398).  
+When enabled `UVW` words can be used to command relative moves for `XYZ` without switching to relative mode with `G91`. `U` -> `X`, `V` -> `Y`, `W` -> `Z`.  
+__NOTE:__ This permanently sets lathe mode and disables the `$32` mode setting.
+
+For developers: 
+
+* There are signature changes to some spindle, ioports enumeration and VFS filing system mount functions.
+
+* Added events to allow plugin code to handle tool table data, possibly stored on a SD card. Ref. [this discussion](https://github.com/grblHAL/core/discussions/392).
+
+Drivers:
+
+* Most: updated for refactored spindle handling and configuration.
+
+* ESP32: fix for spindle at speed failure. Ref. [ioSender issue 345](https://github.com/terjeio/ioSender/issues/345).
+Initial changes for ESP32-S3 support and some code refactoring.
+
+* STM32F7xx: fix to reduce stepper current surge on startup. Ref. [issue 400](https://github.com/grblHAL/core/issues/400).
+
+* iMRX1062: fix for hardfault when enabling aux input IRQ early in startup sequence.  Ref. [issue 395](https://github.com/grblHAL/core/issues/395).
+
+Plugins:
+
+* Spindle: updated for core changes. Added several spindles:  
+_Nowforever VFD._ \(untested\).  
+_Stepper spindle._ This claims the stepper driver from the last configured axis.  
+_PWM clone._ This clones the default driver implemented PWM spindle and changes it to use the direction signal for on/off control.  
+Settings `$730`, `$731` and `$734` - `$736` will be used to configure the clone. These has the same function as the `$30` - `$36` counterparts.  
+The driver spindle is suitable for controlling a laser when `$32` = `1` and the clone is suitable for controlling a spindle motor.  
+Switching between the spindles is typically done with `M104Q<n>` where `<n>` is the spindle number.  
+_Basic spindle._ Needs and claims 1 or 2 auxillary digital output ports depending on the configuration.  
+_Additional PWM spindle._ Needs and claims 1 or 2 auxillary digital output ports and one analog PWM capable port.  
+
+* Motors: fixed default Trinamic motor current - was incorrectly set to 0, changed to 500 mA RMS. Ref. [issue 400](https://github.com/grblHAL/core/issues/400).
+
+* Various: updated for core call signature changes.
+
+---
+
+<a name="20231005"/>Build 20231005
+
+Core:
+
+* Extended secondary stepper driver code and improved debug stream handling.
+
+Drivers:
+
+* iMXRT1062: refactored timer code, improved step injection support.
+
+* STM32F4xx: fixed typo in Trinamic soft serial code.
+
+Plugins:
+
+* Plasma: changed to use rapid rate for THC cutter motion.
+
+* Keypad: increased delay before probing display I2C address to 510ms, [issue #8](https://github.com/grblHAL/Plugin_keypad/issues/8).
+
+* Spindle: added experimental support for stepper spindle. Note: not yet enabled for compilation.
+
+---
+
+<a name="20231002"/>Build 20231002
+
+Core:
+
+* Fixed some typos that may cause compiler warnings.
+
+* Added initial secondary stepper driver code to be used for plasma THC and possibly later for stepper driven spindles.
+
+Drivers:
+
+* ESP32 and RP2040: refactored serial \(UART\) driver code.
+
+* iMXRT1062: improved I2C probe function.
+
+* STM32F1xx, STM32F4xx and STM32F7xx: simplified UART code, added guard to suppress compiler warning for some configurations.
+
+Plugins:
+
+* Plasma: enabled PID loop for voltage THC control.
+
+* Keypad: added 10ms delay before probing display I2C address, [issue #8](https://github.com/grblHAL/Plugin_keypad/issues/8).
+
+---
+
+<a name="20230926"/>Build 20230926
+
+Core:
+
+* "hardened" serial stream registration, now allows empty descriptor.
+
+* now returns no data for alarm and error enums when firmware is compiled for 128K versions of STM32F1xx MCU.
+This frees up some flash space for plugins etc.
+
+Drivers:
+
+* STM32F1xx: refactored serial \(UART\) driver code.
+All ports enabled by a board is now registered with the core at startup and can be claimed by plugin code if unused. 
+
+* STM32F4xx: refactored serial \(UART\) driver code and added option for 3rd port/stream.
+All ports enabled by a board is now registered with the core at startup and can be claimed by plugin code if unused.  
+Switched to DMA for SD card transfers in SPI mode and increased clock frequency.
+Added tentative board map for MKS Robin Nano v3.
+
+* STM32F7xx: refactored serial \(UART\) driver code and added option for 3rd port/stream.
+All ports enabled by a board is now registered with the core at startup and can be claimed by plugin code if unused.  
+Added step injection code for plasma plugin.
+
+* iMXRT1062: extended step injection code for plasma plugin.
+
+Plugins:
+
+* Spindle: for developers; harmonized Modbus serial stream selection symbol, old symbol name retained and marked as deprecated.
+
+* Plasma: some minor bug fixes, added check for presence of driver step injection code.
+
+* Keypad: added 10ms delay before probing display I2C address.
+
+---
+
+<a name="20230919"/>Build 20230919
+
+Core:
+
+* Added setting option to _$21 - Hard limit enable_ to enable exception for rotary axes.
+
+Plugins:
+
+* Spindle: fix for [issue #22](https://github.com/grblHAL/Plugins_spindle/issues/22), H100 VFD driver not working.
+
+Drivers:
+
+* Simulator: updates for core changes and for using native libraries for Windows build. Linux and Windows executables can now be built using the [Web Builder](http://svn.io-engineering.com:8080/?driver=Simulator).
+
+* STM32F1xx, STM32F4xx, LPC176x, RP2040: now keeps motor enable signals high until startup is completed to avoid current surges with Trinamic drivers.
+Ref [RP2040 issue #74](https://github.com/grblHAL/RP2040/issues/74)
+
+---
+
+<a name="20230917"/>Build 20230917
+
+Core:
+
+* Added setting `$486` that allows locking `G59.1` - `G59.3` coordinate system offsets against accidental changes. Use `$$=386` to list bitmask values.
+
+Drivers:
+
+* iMXRT1062: fix for plasma plugin [issue #2](https://github.com/grblHAL/Plugin_plasma/issues/2#issuecomment-1722313452): MCP3221 ADC driver code not allowing plugin code to claim the input.
+
+Plugins:
+
+* Plasma: made code more robust related to driver configuration changes. Still work in progress!
+
+---
+
+<a name="20230913"/>Build 20230913
+
+Core:
+
+* Added faster soft limits check for arcs when work envelope is a cuboid, fixed some related obscure bugs. New/modified core entry points for soft limit checking.
+
+* More delta robot tuning, added setting warning in `$DELTA` output if some settings are inconsistent such as steps/rad, acceleration etc.
+
+* Fix for issue [#361](https://github.com/grblHAL/core/issues/361), `HOME` status is not reported or reported late when auto reporting is enabled with setting `$481`.
+
+Drivers:
+
+* iMXRT1062: fix for MCP3221 ADC regression, [issue #68](https://github.com/grblHAL/iMXRT1062/issues/68#).
+
+* STM32F4xx: SPI pin definition typo, [issue #139](https://github.com/grblHAL/STM32F4xx/issues/139).
+
+* RP2040: workaround for [issue #74](https://github.com/grblHAL/RP2040/issues/74), odd TMC driver addressing.
+
+* Remaining drivers updated for [improved handling of limit inputs](#20230903).
+
 <a name="20230907"/>Build 20230907
 
 Core:
 
-* Delta robot kinematics tuning: soft limits checks, extended $DELTA command++. Still work in progress \(getting closer to working version\).
+* Delta robot kinematics tuning: soft limits checks, extended `$DELTA` command++. Still work in progress \(getting closer to working version\).
 
 Plugins:
 
@@ -18,7 +337,7 @@ Plugins:
 
 * Laser: LaserBurn clusters plugin updated for [new format variation encountered](https://github.com/grblHAL/ESP32/issues/77#issuecomment-1707125447).
 
---
+---
 
 <a name="20230905"/>Build 20230905
 

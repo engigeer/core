@@ -72,8 +72,10 @@ static stream_write_char_ptr mpg_write_char = NULL;
 
 void stream_register_streams (io_stream_details_t *details)
 {
-    details->next = streams;
-    streams = details;
+    if(details->n_streams) {
+        details->next = streams;
+        streams = details;
+    }
 }
 
 bool stream_enumerate_streams (stream_enumerate_callback_ptr callback)
@@ -602,7 +604,8 @@ void debug_write (const char *s)
 {
     if(dbg_write) {
         dbg_write(s);
-        while(hal.debug.get_tx_buffer_count()); // Wait until message is delivered
+        while(hal.debug.get_tx_buffer_count()) // Wait until message is delivered
+            grbl.on_execute_realtime(state_get());
     }
 }
 
@@ -611,7 +614,8 @@ void debug_writeln (const char *s)
     if(dbg_write) {
         dbg_write(s);
         dbg_write(ASCII_EOL);
-        while(hal.debug.get_tx_buffer_count()); // Wait until message is delivered
+        while(hal.debug.get_tx_buffer_count()) // Wait until message is delivered
+            grbl.on_execute_realtime(state_get());
     }
 }
 
@@ -628,7 +632,7 @@ static bool debug_claim_stream (io_stream_properties_t const *stream)
             hal.debug.write = debug_write;
 
             if(hal.periph_port.set_pin_description)
-                hal.periph_port.set_pin_description(Output_TX, hal.debug.instance == 0 ? PinGroup_UART : PinGroup_UART2, "Debug out");
+                hal.periph_port.set_pin_description(Output_TX, (pin_group_t)(PinGroup_UART + hal.debug.instance), "Debug out");
         }
     }
 

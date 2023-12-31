@@ -307,6 +307,8 @@ typedef struct system {
     bool mpg_mode;                          //!< To be moved to system_flags_t
     signal_event_t last_event;              //!< Last signal events (control and limits signal).
     int32_t position[N_AXIS];               //!< Real-time machine (aka home) position vector in steps.
+    axes_signals_t hard_limits; //!< temporary?, will be removed when available in settings.
+    axes_signals_t soft_limits; //!< temporary, will be removed when available in settings.
 //@}
 } system_t;
 
@@ -336,33 +338,18 @@ typedef struct sys_commands_str {
 
 extern system_t sys;
 
-//! Executes an internal system command, defined as a string starting with a '$'
 status_code_t system_execute_line (char *line);
-
-//! Execute the startup script lines stored in non-volatile storage upon initialization
 void system_execute_startup (void);
-
 void system_flag_wco_change (void);
-
-// Returns machine position of axis 'idx'. Must be sent a 'step' array.
-//float system_convert_axis_steps_to_mpos(int32_t *steps, uint_fast8_t idx);
-
-//! Updates a machine 'position' array based on the 'step' array sent.
 void system_convert_array_steps_to_mpos (float *position, int32_t *steps);
-
-//! Checks if XY position is within coordinate system XY with given tolerance.
 bool system_xy_at_fixture (coord_system_id_t id, float tolerance);
-
-//! Raise and report alarm state
 void system_raise_alarm (alarm_code_t alarm);
-
-//! Provide system command help
 void system_command_help (void);
 
 void system_add_rt_report (report_tracking_t report);
 report_tracking_flags_t system_get_rt_report_flags (void);
 
-// Special handlers for setting and clearing Grbl's real-time execution flags.
+// Special handlers for setting and clearing grblHAL's real-time execution flags.
 #define system_set_exec_state_flag(mask) hal.set_bits_atomic(&sys.rt_exec_state, (mask))
 #define system_clear_exec_state_flag(mask) hal.clear_bits_atomic(&sys.rt_exec_state, (mask))
 #define system_clear_exec_states() hal.set_value_atomic(&sys.rt_exec_state, 0)

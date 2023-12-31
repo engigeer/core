@@ -175,7 +175,7 @@ inline static char *axis_signals_tostring (char *buf, axes_signals_t signals)
 
 // Convert control signals bits to string representation.
 // NOTE: returns pointer to null terminator!
-inline static char *control_signals_tostring (char *buf, control_signals_t signals)
+inline static char *control_signals_tostring (char *buf, control_signals_t signals, bool all)
 {
     static const char signals_map[] = "RHSDLTE FM    P ";
 
@@ -200,7 +200,7 @@ inline static char *control_signals_tostring (char *buf, control_signals_t signa
                     break;
 
                 case 'L':
-                    if(sys.flags.block_delete_enabled)
+                    if(all || sys.flags.block_delete_enabled)
                         *buf++ = *map;
                     break;
 
@@ -614,17 +614,15 @@ void report_ngc_parameters (void)
     hal.stream.write(get_axis_values(gc_state.g92_coord_offset));
     hal.stream.write("]" ASCII_EOL);
 
-#if N_TOOLS
-    for (idx = 1; idx <= N_TOOLS; idx++) {
+    for (idx = 1; idx <= grbl.tool_table.n_tools; idx++) {
         hal.stream.write("[T:");
         hal.stream.write(uitoa((uint32_t)idx));
         hal.stream.write("|");
-        hal.stream.write(get_axis_values(tool_table[idx].offset));
+        hal.stream.write(get_axis_values(grbl.tool_table.tool[idx].offset));
         hal.stream.write("|");
-        hal.stream.write(get_axis_value(tool_table[idx].radius));
+        hal.stream.write(get_axis_value(grbl.tool_table.tool[idx].radius));
         hal.stream.write("]" ASCII_EOL);
     }
-#endif
 
 #if COMPATIBILITY_LEVEL < 10
     if(settings.homing.flags.enabled)
@@ -701,7 +699,7 @@ void report_gcode_modes (void)
             hal.stream.write(gc_state.modal.tool_offset_mode == ToolLengthOffset_EnableDynamic ? ".1" : ".2");
     }
 
-    hal.stream.write(gc_state.canned.retract_mode == CCRetractMode_RPos ? " G99" : " G98");
+    hal.stream.write(gc_state.modal.retract_mode == CCRetractMode_RPos ? " G99" : " G98");
 
     if(gc_state.modal.scaling_active) {
         hal.stream.write(" G51:");
@@ -892,11 +890,7 @@ void report_build_info (char *line, bool extended)
         hal.stream.write(",");
         hal.stream.write(uitoa((uint32_t)N_AXIS));
         hal.stream.write(",");
-  #if N_TOOLS
-        hal.stream.write(uitoa((uint32_t)N_TOOLS));
-  #else
-        hal.stream.write("0");
-  #endif
+        hal.stream.write(uitoa(grbl.tool_table.n_tools));
     }
     hal.stream.write("]" ASCII_EOL);
 
@@ -940,8 +934,12 @@ void report_build_info (char *line, bool extended)
         if(hal.driver_cap.mpg_mode)
             strcat(buf, "MPG,");
 
+#if LATHE_UVW_OPTION
+        strcat(buf, "LATHE,LATHEUVW,");
+#else
         if(settings.mode == Mode_Lathe)
             strcat(buf, "LATHE,");
+#endif
 
         if(hal.driver_cap.laser_ppi_mode)
             strcat(buf, "PPI,");
@@ -976,6 +974,11 @@ void report_build_info (char *line, bool extended)
 
         hal.stream.write(buf);
         grbl.on_report_options(true);
+        hal.stream.write("]" ASCII_EOL);
+
+        hal.stream.write("[SIGNALS:");
+        control_signals_tostring(buf, hal.signals_cap, true);
+        hal.stream.write(buf);
         hal.stream.write("]" ASCII_EOL);
 
         hal.stream.write("[FIRMWARE:grblHAL]" ASCII_EOL);
@@ -1180,7 +1183,7 @@ void report_realtime_status (void)
     spindle_state_t spindle_0_state;
 
     spindle_0 = spindle_get(0);
-    spindle_0_state = spindle_0->get_state();
+    spindle_0_state = spindle_0->get_state(spindle_0);
 
     // Report realtime feed speed
     if(settings.status_report.feed_speed) {
@@ -1201,7 +1204,7 @@ void report_realtime_status (void)
         spindle_state_t spindle_n_state;
 
         if((spindle_n = spindle_get(idx))) {
-            spindle_n_state = spindle_n->get_state();
+            spindle_n_state = spindle_n->get_state(spindle_n);
             hal.stream.write_all(appendbuf(3, "|SP", uitoa(idx), ":"));
             hal.stream.write_all(appendbuf(3, uitoa(spindle_n_state.on ? lroundf(spindle_n->param->rpm_overridden) : 0), ",,", spindle_n_state.on ? (spindle_n_state.ccw ? "C" : "S") : ""));
             if(settings.status_report.overrides)
@@ -1234,7 +1237,7 @@ void report_realtime_status (void)
                 append = axis_signals_tostring(append, lim_pin_state);
 
             if(ctrl_pin_state.value)
-                append = control_signals_tostring(append, ctrl_pin_state);
+                append = control_signals_tostring(append, ctrl_pin_state, false);
 
             *append = '\0';
             hal.stream.write_all(buf);
@@ -1466,94 +1469,101 @@ static void report_settings_detail (settings_format_t format, const setting_deta
     switch(format)
     {
         case SettingsFormat_HumanReadable:
-            hal.stream.write(ASCII_EOL "$");
-            hal.stream.write(uitoa(setting->id + offset));
-            hal.stream.write(": ");
-            if(setting->group == Group_Axis0)
-                hal.stream.write(axis_letter[offset]);
-            write_name(setting->name, suboffset);
+            {
+                bool reboot_newline = false;
 
-            switch(setting_datatype_to_external(setting->datatype)) {
+                hal.stream.write(ASCII_EOL "$");
+                hal.stream.write(uitoa(setting->id + offset));
+                hal.stream.write(": ");
+                if(setting->group == Group_Axis0)
+                    hal.stream.write(axis_letter[offset]);
+                write_name(setting->name, suboffset);
 
-                case Format_AxisMask:
-                    hal.stream.write(" as axismask");
-                    break;
+                switch(setting_datatype_to_external(setting->datatype)) {
 
-                case Format_Bool:
-                    hal.stream.write(" as boolean");
-                    break;
+                    case Format_AxisMask:
+                        hal.stream.write(" as axismask");
+                        break;
 
-                case Format_Bitfield:
-                    hal.stream.write(" as bitfield:");
-                    report_bitfield(setting->format, true);
-                    break;
+                    case Format_Bool:
+                        hal.stream.write(" as boolean");
+                        break;
 
-                case Format_XBitfield:
-                    hal.stream.write(" as bitfield where setting bit 0 enables the rest:");
-                    report_bitfield(setting->format, true);
-                    break;
+                    case Format_Bitfield:
+                        hal.stream.write(" as bitfield:");
+                        report_bitfield(setting->format, true);
+                        reboot_newline = true;
+                        break;
 
-                case Format_RadioButtons:
-                    hal.stream.write(":");
-                    report_bitfield(setting->format, false);
-                    break;
+                    case Format_XBitfield:
+                        hal.stream.write(" as bitfield where setting bit 0 enables the rest:");
+                        report_bitfield(setting->format, true);
+                        reboot_newline = true;
+                        break;
 
-                case Format_IPv4:
-                    hal.stream.write(" as IP address");
-                    break;
+                    case Format_RadioButtons:
+                        hal.stream.write(":");
+                        report_bitfield(setting->format, false);
+                        reboot_newline = true;
+                        break;
 
-                default:
-                    if(setting->unit) {
-                        hal.stream.write(" in ");
-                        hal.stream.write(setting->unit);
-                    }
-                    break;
-            }
+                    case Format_IPv4:
+                        hal.stream.write(" as IP address");
+                        break;
 
-            if(setting->min_value && setting->max_value) {
-                hal.stream.write(", range: ");
-                hal.stream.write(setting->min_value);
-                hal.stream.write(" - ");
-                hal.stream.write(setting->max_value);
-            } else if(!setting_is_list(setting)) {
-                if(setting->min_value) {
-                    hal.stream.write(", min: ");
+                    default:
+                        if(setting->unit) {
+                            hal.stream.write(" in ");
+                            hal.stream.write(setting->unit);
+                        }
+                        break;
+                }
+
+                if(setting->min_value && setting->max_value) {
+                    hal.stream.write(", range: ");
                     hal.stream.write(setting->min_value);
-                }
-                if(setting->max_value) {
-                    hal.stream.write(", max: ");
+                    hal.stream.write(" - ");
                     hal.stream.write(setting->max_value);
+                } else if(!setting_is_list(setting)) {
+                    if(setting->min_value) {
+                        hal.stream.write(", min: ");
+                        hal.stream.write(setting->min_value);
+                    }
+                    if(setting->max_value) {
+                        hal.stream.write(", max: ");
+                        hal.stream.write(setting->max_value);
+                    }
                 }
-            }
 
-            if(setting->flags.reboot_required)
-                hal.stream.write(", reboot required");
+                if(setting->flags.reboot_required)
+                    hal.stream.write(reboot_newline ? ASCII_EOL ASCII_EOL "Reboot required." : ", reboot required");
 
 #ifndef NO_SETTINGS_DESCRIPTIONS
-            // Add description if driver is capable of outputting it...
-            if(hal.stream.write_n) {
-                const char *description = setting_get_description((setting_id_t)(setting->id + offset));
-                if(description && *description != '\0') {
-                    char *lf;
-                    hal.stream.write(ASCII_EOL);
-                    if((lf = strstr(description, "\\n"))) while(lf) {
+                // Add description if driver is capable of outputting it...
+                if(hal.stream.write_n) {
+                    const char *description = setting_get_description((setting_id_t)(setting->id + offset));
+                    if(description && *description != '\0') {
+                        char *lf;
                         hal.stream.write(ASCII_EOL);
-                        hal.stream.write_n(description, lf - description);
-                        description = lf + 2;
-                        lf = strstr(description, "\\n");
+                        if((lf = strstr(description, "\\n"))) while(lf) {
+                            hal.stream.write(ASCII_EOL);
+                            hal.stream.write_n(description, lf - description);
+                            description = lf + 2;
+                            lf = strstr(description, "\\n");
+                        }
+                        if(*description != '\0') {
+                            hal.stream.write(ASCII_EOL);
+                            hal.stream.write(description);
+                        }
                     }
-                    if(*description != '\0') {
-                        hal.stream.write(ASCII_EOL);
-                        hal.stream.write(description);
+                    if(setting->flags.reboot_required) {
+                        if(description && *description != '\0')
+                            hal.stream.write(ASCII_EOL ASCII_EOL);
+                        hal.stream.write(SETTINGS_HARD_RESET_REQUIRED + 4);
                     }
                 }
-                if(setting->flags.reboot_required) {
-                    if(description && *description != '\0')
-                        hal.stream.write(ASCII_EOL ASCII_EOL);
-                    hal.stream.write(SETTINGS_HARD_RESET_REQUIRED + 4);
-                }
-            }
 #endif
+            }
             break;
 
         case SettingsFormat_MachineReadable:
@@ -2069,7 +2079,7 @@ status_code_t report_last_signals_event (sys_state_t state, char *args)
 
     strcpy(buf, "[LASTEVENTS:");
 
-    append = control_signals_tostring(append, sys.last_event.control);
+    append = control_signals_tostring(append, sys.last_event.control, false);
     *append++ = ',';
     append = add_limits(append, sys.last_event.limits);
 
@@ -2122,7 +2132,7 @@ status_code_t report_spindle_data (sys_state_t state, char *args)
         float apos = spindle->get_data(SpindleData_AngularPosition)->angular_position;
         spindle_data_t *data = spindle->get_data(SpindleData_Counters);
 
-        hal.stream.write("[SPINDLE:");
+        hal.stream.write("[SPINDLEENCODER:");
         hal.stream.write(uitoa(data->index_count));
         hal.stream.write(",");
         hal.stream.write(uitoa(data->pulse_count));
@@ -2136,19 +2146,6 @@ status_code_t report_spindle_data (sys_state_t state, char *args)
     return spindle->get_data ? Status_OK : Status_InvalidStatement;
 }
 
-static const char *get_pinname (pin_function_t function)
-{
-    const char *name = NULL;
-    uint_fast8_t idx = sizeof(pin_names) / sizeof(pin_name_t);
-
-    do {
-        if(pin_names[--idx].function == function)
-            name = pin_names[idx].name;
-    } while(idx && !name);
-
-    return name ? name : "N/A";
-}
-
 static void report_pin (xbar_t *pin, void *data)
 {
     hal.stream.write("[PIN:");
@@ -2156,7 +2153,7 @@ static void report_pin (xbar_t *pin, void *data)
         hal.stream.write((char *)pin->port);
     hal.stream.write(uitoa(pin->pin));
     hal.stream.write(",");
-    hal.stream.write(get_pinname(pin->function));
+    hal.stream.write(xbar_fn_to_pinname(pin->function));
     if(pin->description) {
         hal.stream.write(",");
         hal.stream.write(pin->description);
@@ -2203,23 +2200,69 @@ status_code_t report_time (void)
 
 static void report_spindle (spindle_info_t *spindle, void *data)
 {
-    hal.stream.write(uitoa(spindle->id));
-    hal.stream.write(" - ");
-    hal.stream.write(spindle->name);
-    if(spindle->enabled) {
-#if N_SPINDLE > 1
-        hal.stream.write(", enabled as spindle ");
-        hal.stream.write(uitoa(spindle->num));
-#else
-        hal.stream.write(", active");
+    if(data) {
+        char *caps = buf;
+        hal.stream.write("[SPINDLE:");
+        hal.stream.write(uitoa(spindle->id));
+        hal.stream.write("|");
+        hal.stream.write(spindle->enabled ? uitoa(spindle->num) : "-");
+        hal.stream.write("|");
+        hal.stream.write(uitoa(spindle->hal->type));
+        *caps++ = '|';
+#if N_SYS_SPINDLE == 1
+        if(spindle->is_current)
+            *caps++ = '*';
 #endif
+        if(spindle->hal->cap.at_speed)
+            *caps++ = 'S';
+        if(spindle->hal->cap.direction)
+            *caps++ = 'D';
+        if(spindle->hal->cap.laser)
+            *caps++ = 'L';
+        if(spindle->hal->cap.pid)
+            *caps++ = 'P';
+        if(spindle->hal->cap.pwm_invert)
+            *caps++ = 'I';
+        if(spindle->hal->cap.pwm_linearization)
+            *caps++ = 'N';
+        if(spindle->hal->cap.rpm_range_locked)
+            *caps++ = 'R';
+        if(spindle->hal->cap.variable)
+            *caps++ = 'V';
+        if(spindle->hal->get_data)
+            *caps++ = 'E';
+        *caps++ = '|';
+        *caps = '\0';
+        hal.stream.write(buf);
+        hal.stream.write(spindle->name);
+        if(spindle->hal->rpm_max > 0.0f) {
+            hal.stream.write("|");
+            hal.stream.write(ftoa(spindle->hal->rpm_min, 1));
+            hal.stream.write(",");
+            hal.stream.write(ftoa(spindle->hal->rpm_max, 1));
+        }
+        hal.stream.write("]" ASCII_EOL);
+    } else {
+        hal.stream.write(uitoa(spindle->id));
+        hal.stream.write(" - ");
+        hal.stream.write(spindle->name);
+        if(spindle->enabled) {
+#if N_SPINDLE > 1
+            hal.stream.write(", enabled as spindle ");
+            hal.stream.write(uitoa(spindle->num));
+ #if N_SYS_SPINDLE == 1
+            if(spindle->is_current)
+                hal.stream.write(", active");
+ #endif
+#endif
+        }
+        hal.stream.write(ASCII_EOL);
     }
-    hal.stream.write(ASCII_EOL);
 }
 
-status_code_t report_spindles (void)
+status_code_t report_spindles (bool machine_readable)
 {
-    if(!spindle_enumerate_spindles(report_spindle, NULL))
+    if(!spindle_enumerate_spindles(report_spindle, (void *)machine_readable) && !machine_readable)
         hal.stream.write("No spindles registered." ASCII_EOL);
 
     return Status_OK;
