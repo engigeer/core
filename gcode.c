@@ -1187,7 +1187,7 @@ status_code_t gc_execute_block (char *block)
                         word_bit.modal_group.M7 = On;
                         gc_block.modal.spindle.state.on = !(int_value == 5);
                         gc_block.modal.spindle.state.ccw = int_value == 4;
-                        sys.override_delay.spindle = On;
+                        //sys.override_delay.spindle = On;
                         break;
 
                     case 6:
@@ -1201,7 +1201,7 @@ status_code_t gc_execute_block (char *block)
 
                     case 7: case 8: case 9:
                         word_bit.modal_group.M8 = On;
-                        sys.override_delay.coolant = On;
+                        //sys.override_delay.coolant = On;
                         gc_parser_flags.set_coolant = On;
                         switch(int_value) {
 
