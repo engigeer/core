@@ -303,6 +303,11 @@ bool ioports_precompute_pwm_values (pwm_config_t *config, ioports_pwm_t *pwm_dat
         pwm_data->max_value = (uint_fast16_t)(pwm_data->period * config->max_value / 100.0f); // + pwm_data->offset;
         pwm_data->pwm_gradient = (float)(pwm_data->max_value - pwm_data->min_value) / (config->max - config->min);
         pwm_data->always_on = config->off_value != 0.0f;
+
+        pwm_data->pwm_quadratic = (float)(pwm_data->period * config->quadratic / 100.0f);
+        pwm_data->pwm_linear = (float)(pwm_data->period * config->linear / 100.0f);
+        pwm_data->pwm_constant = (float)(pwm_data->period * config->constant / 100.0f);
+        
     }
 
     return config->max > config->min;
@@ -319,17 +324,26 @@ Typically this is done by the ioports initialization code.
 uint_fast16_t ioports_compute_pwm_value (ioports_pwm_t *pwm_data, float value)
 {
     uint_fast16_t pwm_value;
+    uint_fast16_t pwm_quadratic_a;
+    uint_fast16_t pwm_linear_b;
+    uint_fast16_t pwm_constant_c;
+    
+    pwm_quadratic_a = (uint_fast16_t)floorf(pwm_data-> pwm_quadratic * value * value);
+    pwm_linear_b = (uint_fast16_t)floorf(pwm_data-> pwm_linear * value);
+    pwm_constant_c = (uint_fast16_t)floorf(pwm_data-> pwm_constant);
 
     if(value > pwm_data->min) {
 
-        pwm_value = (uint_fast16_t)floorf((value - pwm_data->min) * pwm_data->pwm_gradient) + pwm_data->min_value;
+//        pwm_value = (uint_fast16_t)floorf((value - pwm_data->min) * pwm_data->pwm_gradient) + pwm_data->min_value;
+        pwm_value = (uint_fast16_t)floorf(pwm_quadratic_a + pwm_linear_b - pwm_constant_c);
+        pwm_value = invert_pwm(pwm_data, pwm_value);
 
         if(pwm_value >= pwm_data->max_value)
             pwm_value = pwm_data->max_value;
         else if(pwm_value < pwm_data->min_value)
             pwm_value = pwm_data->min_value;
 
-        pwm_value = invert_pwm(pwm_data, pwm_value);
+//        pwm_value = invert_pwm(pwm_data, pwm_value);
     } else
         pwm_value = value == 0.0f ? pwm_data->off_value : invert_pwm(pwm_data, pwm_data->min_value);
 
