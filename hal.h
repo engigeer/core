@@ -3,7 +3,7 @@
 
   Part of grblHAL
 
-  Copyright (c) 2016-2023 Terje Io
+  Copyright (c) 2016-2024 Terje Io
 
   Grbl is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -38,6 +38,7 @@
 #include "nvs.h"
 #include "probe.h"
 #include "ioports.h"
+#include "rgb.h"
 #include "plugins.h"
 
 #define HAL_VERSION 10
@@ -506,6 +507,8 @@ typedef struct {
     rtc_set_datetime_ptr set_datetime;  //!< Optional handler setting the current datetime.
 } rtc_ptrs_t;
 
+/**/
+
 /*! \brief Pointer to function for performing a pallet shuttle.
 */
 typedef void (*pallet_shuttle_ptr)(void);
@@ -595,6 +598,8 @@ typedef struct {
     tool_ptrs_t tool;                       //!< Optional handlers for tool changes.
     rtc_ptrs_t rtc;                         //!< Optional handlers for real time clock (RTC).
     io_port_t port;                         //!< Optional handlers for axuillary I/O (adds support for M62-M66).
+    rgb_ptr_t rgb0;                         //!< Optional handler for RGB output to LEDs (neopixels) or lamps.
+    rgb_ptr_t rgb1;                         //!< Optional handler for RGB output to LEDs (neopixels) or lamps.
     periph_port_t periph_port;              //!< Optional handlers for peripheral pin registration.
     driver_reset_ptr driver_reset;          //!< Optional handler, called on soft resets. Set to a dummy handler by the core at startup.
     nvs_io_t nvs;                           //!< Optional handlers for storing/retrieving settings and data to/from non-volatile storage (NVS).

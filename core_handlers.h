@@ -3,20 +3,20 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020-2023 Terje Io
+  Copyright (c) 2020-2024 Terje Io
 
-  Grbl is free software: you can redistribute it and/or modify
+  grblHAL is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  Grbl is distributed in the hope that it will be useful,
+  grblHAL is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
+  along with grblHAL. If not, see <http://www.gnu.org/licenses/>.
 */
 
 /*! \file
@@ -103,7 +103,10 @@ typedef void (*on_unknown_feedback_message_ptr)(stream_write_ptr stream_write);
 typedef void (*on_stream_changed_ptr)(stream_type_t type);
 typedef bool (*on_laser_ppi_enable_ptr)(uint_fast16_t ppi, uint_fast16_t pulse_length);
 typedef void (*on_homing_rate_set_ptr)(axes_signals_t axes, float rate, homing_mode_t mode);
-typedef void (*on_homing_completed_ptr)(bool success);
+
+// NOTE: cycle contains the axis flags of the executed homing cycle, success will be true when all the configured cycles are completed.
+typedef void (*on_homing_completed_ptr)(axes_signals_t cycle, bool success);
+
 typedef bool (*on_probe_fixture_ptr)(tool_data_t *tool, bool at_g59_3, bool on);
 typedef bool (*on_probe_start_ptr)(axes_signals_t axes, float *target, plan_line_data_t *pl_data);
 typedef void (*on_probe_completed_ptr)(void);
@@ -116,8 +119,6 @@ typedef bool (*on_spindle_select_ptr)(spindle_ptrs_t *spindle);
 typedef void (*on_spindle_selected_ptr)(spindle_ptrs_t *spindle);
 typedef void (*on_gcode_message_ptr)(char *msg);
 typedef void (*on_rt_reports_added_ptr)(report_tracking_flags_t report);
-typedef void (*on_vfs_mount_ptr)(const char *path, const vfs_t *fs);
-typedef void (*on_vfs_unmount_ptr)(const char *path);
 typedef const char *(*on_set_axis_setting_unit_ptr)(setting_id_t setting_id, uint_fast8_t axis_idx);
 typedef status_code_t (*on_file_open_ptr)(const char *fname, vfs_file_t *handle, bool stream);
 typedef status_code_t (*on_unknown_sys_command_ptr)(sys_state_t state, char *line); // return Status_Unhandled.
@@ -155,7 +156,7 @@ typedef struct {
     on_execute_realtime_ptr on_execute_delay;
     on_unknown_accessory_override_ptr on_unknown_accessory_override;
     on_report_options_ptr on_report_options;
-    on_report_command_help_ptr on_report_command_help;
+    on_report_command_help_ptr on_report_command_help; //!< Deprecated, use system_register_commands() to register new commands.
     on_rt_reports_added_ptr on_rt_reports_added;
     on_global_settings_restore_ptr on_global_settings_restore;
     on_setting_get_description_ptr on_setting_get_description;
@@ -166,7 +167,7 @@ typedef struct {
     on_unknown_feedback_message_ptr on_unknown_feedback_message;
     on_unknown_realtime_cmd_ptr on_unknown_realtime_cmd;
     on_unknown_sys_command_ptr on_unknown_sys_command;  //!< return Status_Unhandled if not handled.
-    on_get_commands_ptr on_get_commands;
+    on_get_commands_ptr on_get_commands;                //!< Deprecated, use system_register_commands() to register new commands.
     on_user_command_ptr on_user_command;
     on_stream_changed_ptr on_stream_changed;
     on_homing_rate_set_ptr on_homing_rate_set;
@@ -185,8 +186,6 @@ typedef struct {
     on_spindle_select_ptr on_spindle_select;            //!< Called before spindle is selected, hook in HAL overrides here
     on_spindle_selected_ptr on_spindle_selected;        //!< Called when spindle is selected, do not change HAL pointers here!
     on_reset_ptr on_reset;                              //!< Called from interrupt context.
-    on_vfs_mount_ptr on_vfs_mount;                      //!< Called when a file system is mounted.
-    on_vfs_unmount_ptr on_vfs_unmount;                  //!< Called when a file system is unmounted.
     on_file_open_ptr on_file_open;                      //!< Called when a file is opened for streaming.
     // core entry points - set up by core before driver_init() is called.
     home_machine_ptr home_machine;

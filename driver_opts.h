@@ -5,20 +5,20 @@
 
   Part of grblHAL
 
-  Copyright (c) 2020-2023 Terje Io
+  Copyright (c) 2020-2024 Terje Io
 
-  Grbl is free software: you can redistribute it and/or modify
+  grblHAL is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  Grbl is distributed in the hope that it will be useful,
+  grblHAL is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
+  along with grblHAL. If not, see <http://www.gnu.org/licenses/>.
 */
 
 //
@@ -79,6 +79,10 @@
 #define PROBE_ENABLE        1
 #endif
 
+#ifndef NEOPIXELS_ENABLE
+#define NEOPIXELS_ENABLE    0
+#endif
+
 #ifndef USB_SERIAL_CDC
 #define USB_SERIAL_CDC      0 // for UART comms
 #endif
@@ -104,6 +108,8 @@
 
 #if MPG_ENABLE == 1 && KEYPAD_ENABLE == 2
 #define MPG_MODE            2
+#elif MPG_ENABLE == 2
+#define MPG_MODE            3
 #elif MPG_ENABLE
 #define MPG_MODE            1
 #else
@@ -183,7 +189,7 @@
 #else
   #define TRINAMIC_UART_ENABLE 0
 #endif
-#if (TRINAMIC_ENABLE == 2130 || TRINAMIC_ENABLE == 5160)
+#if (TRINAMIC_ENABLE == 2130 || TRINAMIC_ENABLE == 2660 || TRINAMIC_ENABLE == 5160)
   #if !defined(TRINAMIC_SPI_ENABLE)
     #define TRINAMIC_SPI_ENABLE  1
   #endif
@@ -308,11 +314,11 @@
 
 #if SPINDLE_ENABLE & ((1<<SPINDLE_PWM1)|(1<<SPINDLE_PWM1_NODIR))
 #define DRIVER_SPINDLE1_PWM_ENABLE  1
-#define DRIVER_SPINDLE1_NAME "PWM"
+#define DRIVER_SPINDLE1_NAME "PWM2"
 #else
 #define DRIVER_SPINDLE1_PWM_ENABLE  0
 #if DRIVER_SPINDLE1_ENABLE
-#define DRIVER_SPINDLE1_NAME "Basic"
+#define DRIVER_SPINDLE1_NAME "Basic2"
 #endif
 #endif
 
@@ -353,6 +359,9 @@
 
 #ifndef QEI_ENABLE
 #define QEI_ENABLE          0
+#endif
+#ifndef QEI_SELECT_ENABLE
+#define QEI_SELECT_ENABLE   0
 #endif
 #ifndef ODOMETER_ENABLE
 #define ODOMETER_ENABLE     0
@@ -438,7 +447,7 @@
 #define WEBUI_INFLASH       0
 #endif
 
-#if WEBUI_ENABLE && !defined(ESP_PLATFORM) 
+#if WEBUI_ENABLE
 
 #if !WIFI_ENABLE
 #ifdef ETHERNET_ENABLE

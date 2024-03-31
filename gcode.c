@@ -3,22 +3,22 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2023 Terje Io
+  Copyright (c) 2017-2024 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
 
-  Grbl is free software: you can redistribute it and/or modify
+  grblHAL is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  Grbl is distributed in the hope that it will be useful,
+  grblHAL is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
+  along with grblHAL. If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <math.h>
@@ -337,9 +337,9 @@ void gc_spindle_off (void)
     system_add_rt_report(Report_Spindle);
 }
 
-void gc_coolant_off (void)
+void gc_coolant (coolant_state_t state)
 {
-    gc_state.modal.coolant.value = 0;
+    gc_state.modal.coolant = state;
     hal.coolant.set_state(gc_state.modal.coolant);
     system_add_rt_report(Report_Coolant);
 }
@@ -420,15 +420,18 @@ static status_code_t init_sync_motion (plan_line_data_t *pl_data, float pitch)
 }
 
 // Output and free previously allocated message
-static void output_message (char *message)
+void gc_output_message (char *message)
 {
-    if(grbl.on_gcode_message)
-        grbl.on_gcode_message(message);
+    if(message) {
 
-    if(*message)
-        report_message(message, Message_Plain);
+        if(grbl.on_gcode_message)
+            grbl.on_gcode_message(message);
 
-    free(message);
+        if(*message)
+            report_message(message, Message_Plain);
+
+        free(message);
+    }
 }
 
 #if NGC_EXPRESSIONS_ENABLE
@@ -747,20 +750,20 @@ status_code_t gc_execute_block (char *block)
 
     if(block[0] == '\0') {
         if(message)
-            output_message(message);
+            gc_output_message(message);
         return Status_OK;
     }
 
     // Determine if the line is a program start/end marker.
     // Old comment from protocol.c:
-    // NOTE: This maybe installed to tell Grbl when a program is running vs manual input,
+    // NOTE: This maybe installed to tell grblHAL when a program is running vs manual input,
     // where, during a program, the system auto-cycle start will continue to execute
     // everything until the next '%' sign. This will help fix resuming issues with certain
     // functions that empty the planner buffer to execute its task on-time.
     if (block[0] == CMD_PROGRAM_DEMARCATION && block[1] == '\0') {
         gc_state.file_run = !gc_state.file_run;
         if(message)
-            output_message(message);
+            gc_output_message(message);
         return Status_OK;
     }
 
@@ -774,7 +777,7 @@ status_code_t gc_execute_block (char *block)
     memset(&gc_block, 0, sizeof(gc_block));                           // Initialize the parser block struct.
     memcpy(&gc_block.modal, &gc_state.modal, sizeof(gc_state.modal)); // Copy current modes
 
-    bool set_tool = false, spindle_programmed = false;
+    bool set_tool = false, spindle_event = false;
     axis_command_t axis_command = AxisCommand_None;
     io_mcode_t port_command = (io_mcode_t)0;
     plane_t plane;
@@ -1328,6 +1331,11 @@ status_code_t gc_execute_block (char *block)
                         word_bit.parameter.a = On;
                         gc_block.values.xyz[A_AXIS] = value;
                         break;
+#else
+                    case 'A':
+                        word_bit.parameter.a = On;
+                        gc_block.values.a = value;
+                        break;
 #endif
 
 #ifdef B_AXIS
@@ -1340,6 +1348,11 @@ status_code_t gc_execute_block (char *block)
                         word_bit.parameter.b = On;
                         gc_block.values.xyz[B_AXIS] = value;
                         break;
+#else
+                    case 'B':
+                        word_bit.parameter.b = On;
+                        gc_block.values.b = value;
+                        break;
 #endif
 
 #ifdef C_AXIS
@@ -1351,6 +1364,11 @@ status_code_t gc_execute_block (char *block)
                         axis_words.c = On;
                         word_bit.parameter.c = On;
                         gc_block.values.xyz[C_AXIS] = value;
+                        break;
+#else
+                    case 'C':
+                        word_bit.parameter.c = On;
+                        gc_block.values.c = value;
                         break;
 #endif
 
@@ -1459,26 +1477,43 @@ status_code_t gc_execute_block (char *block)
                         word_bit.parameter.z = word_bit.parameter.w = On;
                         gc_block.values.uvw[Z_AXIS] = value;
                         break;
-
 #else
 
 #ifdef U_AXIS
-                  case 'U':
-                      axis_words.u = On;
-                      word_bit.parameter.u = On;
-                      gc_block.values.xyz[U_AXIS] = value;
-                      break;
+                    case 'U':
+                        axis_words.u = On;
+                        word_bit.parameter.u = On;
+                        gc_block.values.xyz[U_AXIS] = value;
+                        break;
+#elif !AXIS_REMAP_ABC2UVW
+                    case 'U':
+                        word_bit.parameter.u = On;
+                        gc_block.values.u = value;
+                        break;
 #endif
 
 #ifdef V_AXIS
-                  case 'V':
-                      axis_words.v = On;
-                      word_bit.parameter.v = On;
-                      gc_block.values.xyz[V_AXIS] = value;
-                      break;
+                    case 'V':
+                        axis_words.v = On;
+                        word_bit.parameter.v = On;
+                        gc_block.values.xyz[V_AXIS] = value;
+                        break;
+#elif !AXIS_REMAP_ABC2UVW
+                    case 'V':
+                        word_bit.parameter.v = On;
+                        gc_block.values.v = value;
+                        break;
 #endif
+
+#if !AXIS_REMAP_ABC2UVW
+                    case 'W':
+                        word_bit.parameter.w = On;
+                        gc_block.values.w = value;
+                        break;
 #endif
-                  case 'X':
+
+#endif // !LATHE_UVW_OPTION
+                    case 'X':
                         axis_words.x = On;
                         word_bit.parameter.x = On;
                         gc_block.values.xyz[X_AXIS] = value;
@@ -1546,7 +1581,7 @@ status_code_t gc_execute_block (char *block)
      To do this, this would simply need to retain all of the data in STEP 1, such as the new block
      data struct, the modal group and value bitflag tracking variables, and axis array indices
      compatible variables. This data contains all of the information necessary to error-check the
-     new g-code block when the EOL character is received. However, this would break Grbl's startup
+     new g-code block when the EOL character is received. However, this would break grblHAL's startup
      lines in how it currently works and would require some refactoring to make it compatible.
   */
 
@@ -1701,7 +1736,7 @@ status_code_t gc_execute_block (char *block)
         gc_state.modal.spindle.rpm_mode = gc_block.modal.spindle.rpm_mode;
     }
 
-    spindle_programmed = gc_block.words.s && !user_words.s;
+    spindle_event = gc_block.words.s && !user_words.s;
 
     if (!gc_block.words.s)
         gc_block.values.s = gc_state.modal.spindle.rpm_mode == SpindleSpeedMode_RPM ? gc_state.spindle.rpm : gc_state.spindle.hal->param->css.max_rpm;
@@ -2014,7 +2049,7 @@ status_code_t gc_execute_block (char *block)
 
     // [13. Cutter radius compensation ]: G41/42 NOT SUPPORTED. Error, if enabled while G53 is active.
     // [G40 Errors]: G2/3 arc is programmed after a G40. The linear move after disabling is less than tool diameter.
-    //   NOTE: Since cutter radius compensation is never enabled, these G40 errors don't apply. Grbl supports G40
+    //   NOTE: Since cutter radius compensation is never enabled, these G40 errors don't apply. grblHAL supports G40
     //   only for the purpose to not error when G40 is sent with a g-code program header to setup the default modes.
 
     // [14. Tool length compensation ]: G43.1 and G49 are always supported, G43 and G43.2 if grbl.tool_table.n_tools > 0
@@ -2178,8 +2213,8 @@ status_code_t gc_execute_block (char *block)
                             gc_block.words.r = Off;
                         }
 
-                        float g59_3_offset[N_AXIS];
 #if COMPATIBILITY_LEVEL <= 1
+                        float g59_3_offset[N_AXIS];
                         if(gc_block.values.l == 11 && !settings_read_coord_data(CoordinateSystem_G59_3, &g59_3_offset))
                             FAIL(Status_SettingReadFail);
 #endif
@@ -2194,8 +2229,10 @@ status_code_t gc_execute_block (char *block)
                                     grbl.tool_table.tool[p_value].offset[idx] = gc_block.values.xyz[idx];
                                 else if(gc_block.values.l == 10)
                                     grbl.tool_table.tool[p_value].offset[idx] = gc_state.position[idx] - gc_state.modal.coord_system.xyz[idx] - gc_state.g92_coord_offset[idx] - gc_block.values.xyz[idx];
+#if COMPATIBILITY_LEVEL <= 1
                                 else if(gc_block.values.l == 11)
                                     grbl.tool_table.tool[p_value].offset[idx] = g59_3_offset[idx] - gc_block.values.xyz[idx];
+#endif
     //                            if(gc_block.values.l != 1)
     //                                tool_table[p_value].offset[idx] -= gc_state.tool_length_offset[idx];
                             } else if(gc_block.values.l == 10 || gc_block.values.l == 11)
@@ -2976,7 +3013,7 @@ status_code_t gc_execute_block (char *block)
             gc_state.spindle.css->tool_offset = gc_get_offset(gc_state.spindle.css->axis);
             float pos = gc_state.position[gc_state.spindle.css->axis] - gc_state.spindle.css->tool_offset;
             gc_block.values.s = pos <= 0.0f ? gc_state.spindle.css->max_rpm : min(gc_state.spindle.css->max_rpm, gc_state.spindle.css->surface_speed / (pos * (float)(2.0f * M_PI)));
-            gc_parser_flags.spindle_force_sync = On;
+//??            gc_parser_flags.spindle_force_sync = On;
         } else {
             if(gc_state.spindle.css) {
                 gc_state.spindle.css = NULL;
@@ -3077,7 +3114,7 @@ status_code_t gc_execute_block (char *block)
         protocol_buffer_synchronize();
 
         if(plan_data.message) {
-            output_message(plan_data.message);
+            gc_output_message(plan_data.message);
             plan_data.message = NULL;
         }
 
@@ -3123,31 +3160,35 @@ status_code_t gc_execute_block (char *block)
     }
 
     // [7. Spindle control ]:
-    if (gc_state.modal.spindle.state.value != gc_block.modal.spindle.state.value) {
+    if(gc_state.modal.spindle.state.value != gc_block.modal.spindle.state.value) {
         // Update spindle control and apply spindle speed when enabling it in this block.
         // NOTE: All spindle state changes are synced, even in laser mode. Also, plan_data,
         // rather than gc_state, is used to manage laser state for non-laser motions.
+        bool spindle_ok = false;
         if(gc_block.spindle) {
-            if((spindle_programmed = spindle_sync(gc_block.spindle, gc_block.modal.spindle.state, plan_data.spindle.rpm)))
+            if(grbl.on_spindle_programmed)
+                grbl.on_spindle_programmed(gc_block.spindle, gc_block.modal.spindle.state,  plan_data.spindle.rpm, gc_block.modal.spindle.rpm_mode);
+            if((spindle_ok = spindle_sync(gc_block.spindle, gc_block.modal.spindle.state, plan_data.spindle.rpm)))
                 gc_block.spindle->param->state = gc_block.modal.spindle.state;
         } else {
             idx = N_SYS_SPINDLE;
             do {
                 if(spindle_is_enabled(--idx)) {
                     spindle_ptrs_t *spindle = spindle_get(idx);
-                    if(spindle_sync(spindle, gc_block.modal.spindle.state, plan_data.spindle.rpm)) {
-                        spindle_programmed = true;
+                    if(grbl.on_spindle_programmed)
+                        grbl.on_spindle_programmed(spindle, gc_block.modal.spindle.state,  plan_data.spindle.rpm, gc_block.modal.spindle.rpm_mode);
+                    if(spindle_sync(spindle, gc_block.modal.spindle.state, plan_data.spindle.rpm))
                         spindle->param->state = gc_block.modal.spindle.state;
-                    }
+                    else
+                        spindle_ok = false;
                 }
             } while(idx);
         }
-        if(spindle_programmed)
+        if(!(spindle_event = !spindle_ok))
             gc_state.modal.spindle.state = gc_block.modal.spindle.state;
     }
 
-    // TODO: add spindle argument and move into loop above?
-    if(spindle_programmed && grbl.on_spindle_programmed)
+    if(spindle_event && grbl.on_spindle_programmed)
         grbl.on_spindle_programmed(gc_state.spindle.hal, gc_state.modal.spindle.state, gc_state.spindle.rpm, gc_state.modal.spindle.rpm_mode);
 
 // TODO: Recheck spindle running in CCS mode (is_rpm_pos_adjusted == On)?
@@ -3376,7 +3417,8 @@ status_code_t gc_execute_block (char *block)
 
             case MotionMode_Linear:
                 if(gc_state.modal.feed_mode == FeedMode_UnitsPerRev) {
-                    plan_data.spindle.state.synchronized = On;
+                    plan_data.condition.units_per_rev = On;
+                    plan_data.spindle.state.synchronized = settings.mode != Mode_Lathe || gc_block.values.xyz[Z_AXIS] != gc_state.position[Z_AXIS];
                 //??    gc_state.distance_per_rev = plan_data.feed_rate;
                     // check initial feed rate - fail if zero?
                 }
@@ -3390,7 +3432,9 @@ status_code_t gc_execute_block (char *block)
 
             case MotionMode_CwArc:
             case MotionMode_CcwArc:
-                // fail if spindle synchronized motion?
+                if(gc_state.modal.feed_mode == FeedMode_UnitsPerRev)
+                    plan_data.condition.units_per_rev = plan_data.spindle.state.synchronized = On;
+
                 mc_arc(gc_block.values.xyz, &plan_data, gc_state.position, gc_block.values.ijk, gc_block.values.r,
                         plane, gc_parser_flags.arc_is_clockwise ? -gc_block.arc_turns : gc_block.arc_turns);
                 break;
@@ -3503,7 +3547,7 @@ status_code_t gc_execute_block (char *block)
     }
 
     if(plan_data.message)
-        output_message(plan_data.message);
+        gc_output_message(plan_data.message);
 
     // [21. Program flow ]:
     // M0,M1,M2,M30,M60: Perform non-running program flow actions. During a program pause, the buffer may
