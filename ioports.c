@@ -403,21 +403,18 @@ bool ioports_precompute_pwm_values (pwm_config_t *config, ioports_pwm_t *pwm_dat
         pwm_data->min_value = (uint_fast16_t)(pwm_data->period * config->min_value / 100.0f);
         pwm_data->max_value = (uint_fast16_t)(pwm_data->period * config->max_value / 100.0f); // + pwm_data->offset;
         pwm_data->pwm_gradient = (float)(pwm_data->max_value - pwm_data->min_value) / (config->max - config->min);
-<<<<<<< HEAD
         pwm_data->always_on = config->off_value != 0.0f;
 
         pwm_data->pwm_quadratic = (float)(pwm_data->period * config->quadratic / 100.0f);
         pwm_data->pwm_linear = (float)(pwm_data->period * config->linear / 100.0f);
         pwm_data->pwm_constant = (float)(pwm_data->period * config->constant / 100.0f);
         
-=======
         if(!(pwm_data->always_on = config->off_value != 0.0f))
             pwm_data->off_value = pwm_data->invert_pwm ? pwm_data->period : 0;
         else if(!config->servo_mode && config->off_value > 0.0f)
             pwm_data->off_value = invert_pwm(pwm_data, (uint_fast16_t)(pwm_data->period * config->off_value / 100.0f));
         else
             pwm_data->off_value = pwm_data->min_value;
->>>>>>> upstream/master
     }
 
     return config->max > config->min;
