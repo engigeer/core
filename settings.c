@@ -601,9 +601,8 @@ PROGMEM static const setting_detail_t setting_detail[] = {
 #endif
 #ifndef NO_SAFETY_DOOR_SUPPORT
      { Setting_DoorSpindleOnDelay, Group_SafetyDoor, "Spindle on delay", "s", Format_Decimal, "#0.0", "0.5", "20", Setting_IsExtended, &settings.safety_door.spindle_on_delay, NULL, is_setting_available },
-//     { Setting_DoorCoolantOnDelay, Group_SafetyDoor, "Coolant on delay", "s", Format_Decimal, "#0.0", "0.5", "20", Setting_IsExtended, &settings.safety_door.coolant_on_delay, NULL, is_setting_available },
+     { Setting_DoorCoolantOnDelay, Group_SafetyDoor, "Coolant on delay", "s", Format_Decimal, "#0.0", "0.5", "20", Setting_IsExtended, &settings.safety_door.coolant_on_delay, NULL, is_setting_available },
 #endif
-     { Setting_DoorCoolantOnDelay, Group_Coolant, "Coolant on delay", "s", Format_Decimal, "#0.0", "0.5", "20", Setting_IsExtended, &settings.safety_door.coolant_on_delay, NULL, NULL},
      { Setting_SpindleOnDelay, Group_Spindle, "Spindle on delay", "s", Format_Decimal, "#0.0", "0.5", "20", Setting_IsExtended, &settings.safety_door.spindle_on_delay, NULL, is_setting_available },
      { Setting_SpindleType, Group_Spindle, "Default spindle", NULL, Format_RadioButtons, spindle_types, NULL, NULL, Setting_IsExtendedFn, set_spindle_type, get_int, is_setting_available },
      { Setting_PlannerBlocks, Group_General, "Planner buffer blocks", NULL, Format_Int16, "####0", "30", "1000", Setting_IsExtended, &settings.planner_buffer_blocks, NULL, NULL, { .reboot_required = On } },
@@ -776,13 +775,9 @@ PROGMEM static const setting_descr_t setting_descr[] = {
     { Setting_DisableG92Persistence, "Disables save/restore of G92 offset to non-volatile storage (NVS)." },
 #endif
 #ifndef NO_SAFETY_DOOR_SUPPORT
-    { Setting_DoorSpindleOnDelay, "Delay to allow spindle to spin up after safety door is opened." },
-//    { Setting_DoorCoolantOnDelay, "Delay to allow coolant to restart after safety door is opened." },
     { Setting_DoorSpindleOnDelay, "Delay to allow spindle to spin up after safety door is opened or feed hold is canceled.." },
     { Setting_DoorCoolantOnDelay, "Delay to allow coolant to restart after safety door is opened or feed hold is canceled.." },
->>>>>>> upstream/master
 #else
-    { Setting_DoorCoolantOnDelay, "Delay to allow coolant to restart after feedhold." },
     { Setting_DoorSpindleOnDelay, "Delay to allow spindle to spin up when spindle at speed tolerance is > 0." },
 #endif
     { Setting_SpindleOnDelay, "Delay to allow spindle to restart after feed hold is canceled." },
@@ -799,7 +794,6 @@ PROGMEM static const setting_descr_t setting_descr[] = {
 #endif
     { Setting_EncoderSpindle, "Specifies which spindle has the encoder attached." },
     { Setting_FSOptions, "Auto mount SD card on startup." },
-    { Setting_HomePinsInvertMask, "Inverts the axis home input signals." },
     { Setting_HoldCoolantOnDelay, "Delay to allow coolant to restart after feed hold is canceled." }
 };
 
@@ -1998,7 +1992,7 @@ static bool is_setting_available (const setting_detail_t *setting)
             break;
 
         case Setting_HoldCoolantOnDelay:
-            available = !hal.signals_cap.safety_door_ajar && hal.coolant_cap.mask;
+            available = !hal.signals_cap.safety_door_ajar;
             break;
 
         default:
