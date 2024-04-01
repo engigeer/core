@@ -546,11 +546,10 @@ bool spindle_sync (spindle_ptrs_t *spindle, spindle_state_t state, float rpm)
         if((ok = protocol_buffer_synchronize()) && set_state(spindle, state, rpm) && !at_speed) {
             float on_delay = 0.0f;
             while(!(at_speed = spindle->get_state(spindle).at_speed)) {
-                delay_sec(0.2f, DelayMode_Dwell);
-                on_delay += 0.2f;
-                if(ABORTED)
+                if(!(ok = delay_sec(0.2f, DelayMode_Dwell)))
                     break;
-                if(on_delay >= settings.safety_door.spindle_on_delay) {
+                on_delay += 0.2f;
+                if(!(ok = on_delay < settings.safety_door.spindle_on_delay)) {
                     gc_spindle_off();
                     system_raise_alarm(Alarm_Spindle);
                     break;
@@ -580,15 +579,14 @@ bool spindle_restore (spindle_ptrs_t *spindle, spindle_state_t state, float rpm)
         spindle_set_state(spindle, state, rpm);
         if(state.on) {
             if((ok = !spindle->cap.at_speed))
-                delay_sec(settings.safety_door.spindle_on_delay, DelayMode_SysSuspend);
+                ok = delay_sec(settings.safety_door.spindle_on_delay, DelayMode_SysSuspend);
             else if((ok == (settings.spindle.at_speed_tolerance <= 0.0f))) {
                 float delay = 0.0f;
                 while(!(ok = spindle->get_state(spindle).at_speed)) {
-                    delay_sec(0.1f, DelayMode_SysSuspend);
-                    delay += 0.1f;
-                    if(ABORTED)
+                    if(!(ok = delay_sec(0.1f, DelayMode_SysSuspend)))
                         break;
-                    if(delay >= settings.safety_door.spindle_on_delay) {
+                    delay += 0.1f;
+                    if(!(ok = delay < settings.safety_door.spindle_on_delay)) {
                         system_raise_alarm(Alarm_Spindle);
                         break;
                     }

@@ -219,10 +219,10 @@ status_code_t read_uint (char *line, uint_fast8_t *char_counter, uint32_t *uint_
 // Read a floating point value from a string. Line points to the input buffer, char_counter
 // is the indexer pointing to the current character of the line, while float_ptr is
 // a pointer to the result variable. Returns true when it succeeds
-bool read_float(char *line, uint_fast8_t *char_counter, float *float_ptr);
+bool read_float (char *line, uint_fast8_t *char_counter, float *float_ptr);
 
 // Non-blocking delay function used for general operation and suspend features.
-void delay_sec(float seconds, delaymode_t mode);
+bool delay_sec (float seconds, delaymode_t mode);
 
 float convert_delta_vector_to_unit_vector(float *vector);
 

@@ -407,6 +407,8 @@ typedef enum {
     Setting_Kinematics9         = 649,
 
     Setting_FSOptions = 650,
+    Setting_HoldCoolantOnDelay = 673, // made available if safety door input not provided
+
 
     Setting_RpmMax1 = 730,
     Setting_RpmMin1 = 731,

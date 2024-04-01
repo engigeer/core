@@ -617,7 +617,7 @@ PROGMEM static const setting_detail_t setting_detail[] = {
      { Setting_OffsetLock, Group_General, "Lock coordinate systems", NULL, Format_Bitfield, "G59.1,G59.2,G59.3", NULL, NULL, Setting_IsExtendedFn, set_offset_lock, get_int, NULL },
 #endif
      { Setting_EncoderSpindle, Group_Spindle, "Encoder spindle", NULL, Format_RadioButtons, spindle_types, NULL, NULL, Setting_IsExtendedFn, set_encoder_spindle, get_int, is_setting_available },
-     { Setting_FSOptions, Group_General, "File systems options", NULL, Format_Bitfield, fs_options, NULL, NULL, Setting_IsExtended, &settings.fs_options.mask, NULL, is_setting_available }
+     { Setting_HoldCoolantOnDelay, Group_Coolant, "Coolant on delay", "s", Format_Decimal, "#0.0", "0.5", "20", Setting_IsExtended, &settings.safety_door.coolant_on_delay, NULL, is_setting_available }
 };
 
 #ifndef NO_SETTINGS_DESCRIPTIONS
@@ -778,10 +778,14 @@ PROGMEM static const setting_descr_t setting_descr[] = {
 #ifndef NO_SAFETY_DOOR_SUPPORT
     { Setting_DoorSpindleOnDelay, "Delay to allow spindle to spin up after safety door is opened." },
 //    { Setting_DoorCoolantOnDelay, "Delay to allow coolant to restart after safety door is opened." },
+    { Setting_DoorSpindleOnDelay, "Delay to allow spindle to spin up after safety door is opened or feed hold is canceled.." },
+    { Setting_DoorCoolantOnDelay, "Delay to allow coolant to restart after safety door is opened or feed hold is canceled.." },
+>>>>>>> upstream/master
 #else
     { Setting_DoorCoolantOnDelay, "Delay to allow coolant to restart after feedhold." },
     { Setting_DoorSpindleOnDelay, "Delay to allow spindle to spin up when spindle at speed tolerance is > 0." },
 #endif
+    { Setting_SpindleOnDelay, "Delay to allow spindle to restart after feed hold is canceled." },
     { Setting_SpindleType, "Spindle selected on startup." },
     { Setting_PlannerBlocks, "Number of blocks in the planner buffer." },
     { Setting_AutoReportInterval, "Interval the real time report will be sent, set to 0 to disable." },
@@ -794,7 +798,9 @@ PROGMEM static const setting_descr_t setting_descr[] = {
     { Setting_NGCDebugOut, "Example: (debug, metric mode: #<_metric>, coord system: #5220)" },
 #endif
     { Setting_EncoderSpindle, "Specifies which spindle has the encoder attached." },
-    { Setting_FSOptions, "Auto mount SD card on startup." }
+    { Setting_FSOptions, "Auto mount SD card on startup." },
+    { Setting_HomePinsInvertMask, "Inverts the axis home input signals." },
+    { Setting_HoldCoolantOnDelay, "Delay to allow coolant to restart after feed hold is canceled." }
 };
 
 #endif
@@ -1989,6 +1995,10 @@ static bool is_setting_available (const setting_detail_t *setting)
 
         case Setting_FSOptions:
             available = hal.driver_cap.sd_card || hal.driver_cap.littlefs;
+            break;
+
+        case Setting_HoldCoolantOnDelay:
+            available = !hal.signals_cap.safety_door_ajar && hal.coolant_cap.mask;
             break;
 
         default:

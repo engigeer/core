@@ -296,21 +296,22 @@ bool isintf (float value)
 }
 
 // Non-blocking delay function used for general operation and suspend features.
-void delay_sec (float seconds, delaymode_t mode)
+bool delay_sec (float seconds, delaymode_t mode)
 {
+    bool ok = true;
+
     uint_fast16_t i = (uint_fast16_t)ceilf((1000.0f / DWELL_TIME_STEP) * seconds) + 1;
 
-    while (--i && !sys.abort) {
-        if (mode == DelayMode_Dwell) {
-            protocol_execute_realtime();
-        } else { // DelayMode_SysSuspend
-          // Execute rt_system() only to avoid nesting suspend loops.
-          protocol_exec_rt_system();
-          if (state_door_reopened()) // Bail, if safety door reopens.
-              return;
-        }
-        hal.delay_ms(DWELL_TIME_STEP, 0); // Delay DWELL_TIME_STEP increment
+    while(--i && ok) {
+        if(mode == DelayMode_Dwell)
+            ok = protocol_execute_realtime();
+        else // DelayMode_SysSuspende, xecute rt_system() only to avoid nesting suspend loops.
+            ok = protocol_exec_rt_system() && !state_door_reopened(); // Bail, if safety door reopens.
+        if(ok)
+            hal.delay_ms(DWELL_TIME_STEP, NULL); // Delay DWELL_TIME_STEP increment
     }
+
+    return ok;
 }
 
 

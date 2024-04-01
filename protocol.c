@@ -566,7 +566,7 @@ bool protocol_exec_rt_system (void)
 
             // Kill spindle and coolant. TODO: Check Mach3 behaviour?
             gc_spindle_off();
-            gc_coolant_off();
+            gc_coolant((coolant_state_t){0});
 
             flush_override_buffers();
             if(!((state_get() == STATE_ALARM) && (sys.alarm == Alarm_LimitsEngaged || sys.alarm == Alarm_HomingRequired)))

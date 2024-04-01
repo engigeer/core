@@ -41,7 +41,7 @@ static void state_await_waypoint_retract (uint_fast16_t rt_exec);
 static void state_restore (uint_fast16_t rt_exec);
 static void state_await_resumed (uint_fast16_t rt_exec);
 
-static void (* volatile stateHandler)(uint_fast16_t rt_exec) = state_idle;
+static void (*volatile stateHandler)(uint_fast16_t rt_exec) = state_idle;
 
 typedef struct {
     coolant_state_t coolant;
@@ -101,7 +101,7 @@ static void state_restore_conditions (restore_condition_t *condition)
         // Block if safety door re-opened during prior restore actions.
         if (gc_state.modal.coolant.value != hal.coolant.get_state().value) {
             // NOTE: Laser mode will honor this delay. An exhaust system is often controlled by this signal.
-            coolant_set_state(condition->coolant);
+            gc_coolant(condition->coolant);;
             delay_sec(settings.safety_door.coolant_on_delay, DelayMode_SysSuspend);
         }
 
@@ -666,7 +666,7 @@ static void state_await_resume (uint_fast16_t rt_exec)
 
                     if (restore_condition.coolant.value != hal.coolant.get_state().value) {
                         // NOTE: Laser mode will honor this delay. An exhaust system is often controlled by coolant signals.
-                        coolant_set_state(restore_condition.coolant);
+                        gc_coolant(restore_condition.coolant);
                         delay_sec(settings.safety_door.coolant_on_delay, DelayMode_SysSuspend);
                     }
 
