@@ -1,9 +1,9 @@
 /*
-  platform.h - platform specific definitions
+  task.h - delayed task handling
 
   Part of grblHAL
 
-  Copyright (c) 2021-2024 Terje Io
+  Copyright (c) 2024 Terje Io
 
   grblHAL is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -19,17 +19,15 @@
   along with grblHAL. If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma once
+#ifndef _CORE_TASK_H_
+#define _CORE_TASK_H_
 
-#if defined(STM32F103xB) || defined(STM32F103xE) || defined(STM32F401xC) || defined(STM32F401xE) || defined(STM32F407xx) || defined(STM32F411xE) || \
-    defined(STM32F412Vx) || defined(STM32F446xx) || defined(STM32F756xx) || defined(STM32F765xx) || defined(STM32H743xx) || defined(STM32H723xx)
-#define STM32_PLATFORM
-#endif
+typedef void (*foreground_task_ptr)(void *data);
 
-#if defined(STM32_PLATFORM) || defined(__LPC17XX__) ||  defined(__IMXRT1062__)
-#define UINT32FMT "%lu"
-#define UINT32SFMT "lu"
-#else
-#define UINT32FMT "%u"
-#define UINT32SFMT "u"
-#endif
+bool task_add_immediate (foreground_task_ptr fn, void *data);
+bool task_add_delayed (foreground_task_ptr fn, void *data, uint32_t delay_ms);
+void task_delete (foreground_task_ptr fn, void *data);
+bool task_add_systick (foreground_task_ptr fn, void *data);
+void task_delete_systick (foreground_task_ptr fn, void *data);
+
+#endif // _CORE_TASK_H_

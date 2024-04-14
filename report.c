@@ -3,21 +3,21 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2023 Terje Io
+  Copyright (c) 2017-2024 Terje Io
   Copyright (c) 2012-2016 Sungeun K. Jeon for Gnea Research LLC
 
-  Grbl is free software: you can redistribute it and/or modify
+  grblHAL is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  Grbl is distributed in the hope that it will be useful,
+  grblHAL is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
+  along with grblHAL. If not, see <http://www.gnu.org/licenses/>.
 */
 
 /*
@@ -175,14 +175,11 @@ inline static char *axis_signals_tostring (char *buf, axes_signals_t signals)
 
 // Convert control signals bits to string representation.
 // NOTE: returns pointer to null terminator!
-inline static char *control_signals_tostring (char *buf, control_signals_t signals, bool all)
+inline static char *control_signals_tostring (char *buf, control_signals_t signals)
 {
-    static const char signals_map[] = "RHSDLTE FM    P ";
+    static const char signals_map[] = "RHSDLTEOFM Q  P ";
 
     char *map = (char *)signals_map;
-
-    if(!hal.signals_cap.stop_disable)
-        signals.stop_disable = sys.flags.optional_stop_disable;
 
     if(!signals.deasserted)
       while(signals.mask) {
@@ -196,11 +193,6 @@ inline static char *control_signals_tostring (char *buf, control_signals_t signa
 
                 case 'D':
                     if(hal.signals_cap.safety_door_ajar)
-                        *buf++ = *map;
-                    break;
-
-                case 'L':
-                    if(all || sys.flags.block_delete_enabled)
                         *buf++ = *map;
                     break;
 
@@ -260,24 +252,45 @@ static alarm_code_t report_alarm_message (alarm_code_t alarm_code)
 // Prints feedback message, typically from gcode.
 void report_message (const char *msg, message_type_t type)
 {
-    hal.stream.write("[MSG:");
+    if(hal.stream.is_connected()) {
 
-    switch(type) {
+        hal.stream.write("[MSG:");
 
-        case Message_Info:
-            hal.stream.write("Info: ");
-            break;
+        switch(type) {
 
-        case Message_Warning:
-            hal.stream.write("Warning: ");
-            break;
+            case Message_Info:
+                hal.stream.write("Info: ");
+                break;
 
-        default:
-            break;
+            case Message_Warning:
+                hal.stream.write("Warning: ");
+                break;
+
+            default:
+                break;
+        }
+
+        hal.stream.write(msg);
+        hal.stream.write("]" ASCII_EOL);
     }
+}
 
-    hal.stream.write(msg);
-    hal.stream.write("]" ASCII_EOL);
+// Message helper to be run as foreground task
+void report_plain (void *message)
+{
+    report_message((char *)message, Message_Plain);
+}
+
+// Message helper to be run as foreground task
+void report_info (void *message)
+{
+    report_message((char *)message, Message_Info);
+}
+
+// Message helper to be run as foreground task
+void report_warning (void *message)
+{
+    report_message((char *)message, Message_Warning);
 }
 
 // Prints feedback messages. This serves as a centralized method to provide additional
@@ -301,6 +314,7 @@ static message_code_t report_feedback_message (message_code_t id)
 static void report_init_message (void)
 {
     override_counter = wco_counter = 0;
+
 #if COMPATIBILITY_LEVEL == 0
     hal.stream.write_all(ASCII_EOL "GrblHAL " GRBL_VERSION " ['$' or '$HELP' for help]" ASCII_EOL);
 #else
@@ -684,7 +698,7 @@ void report_gcode_modes (void)
     hal.stream.write(gc_state.modal.distance_incremental ? " G91" : " G90");
 
     hal.stream.write(" G");
-    hal.stream.write(uitoa((uint32_t)(94 - gc_state.modal.feed_mode)));
+    hal.stream.write(uitoa((uint32_t)(93 + (gc_state.modal.feed_mode == FeedMode_UnitsPerRev ? 2 : gc_state.modal.feed_mode ^ 1))));
 
     if(settings.mode == Mode_Lathe && gc_spindle_get()->cap.variable)
         hal.stream.write(gc_state.modal.spindle.rpm_mode == SpindleSpeedMode_RPM ? " G97" : " G96");
@@ -811,15 +825,16 @@ void report_build_info (char *line, bool extended)
     // Generate compile-time build option list
 
     char *append = &buf[5];
+    spindle_ptrs_t *spindle = spindle_get(0);
 
     strcpy(buf, "[OPT:");
 
-    if(spindle_get_caps(false).variable)
+    if(spindle && spindle->cap.variable)
         *append++ = 'V';
 
     *append++ = 'N';
 
-    if(hal.driver_cap.mist_control)
+    if(hal.coolant_cap.mist)
         *append++ = 'M';
 
 #if COREXY
@@ -840,6 +855,9 @@ void report_build_info (char *line, bool extended)
 
     if(settings.probe.allow_feed_override)
         *append++ = 'A';
+
+    if(spindle && !spindle->cap.direction) // NOTE: Shown when disabled.
+        *append++ = 'D';
 
     if(settings.spindle.flags.enable_rpm_controlled)
         *append++ = '0';
@@ -976,12 +994,12 @@ void report_build_info (char *line, bool extended)
         grbl.on_report_options(true);
         hal.stream.write("]" ASCII_EOL);
 
+        hal.stream.write("[FIRMWARE:grblHAL]" ASCII_EOL);
+
         hal.stream.write("[SIGNALS:");
-        control_signals_tostring(buf, hal.signals_cap, true);
+        control_signals_tostring(buf, hal.signals_cap);
         hal.stream.write(buf);
         hal.stream.write("]" ASCII_EOL);
-
-        hal.stream.write("[FIRMWARE:grblHAL]" ASCII_EOL);
 
         if(!(nvs->type == NVS_None || nvs->type == NVS_Emulated)) {
             hal.stream.write("[NVS STORAGE:");
@@ -1212,32 +1230,45 @@ void report_realtime_status (void)
         }
     }
 
+#elif N_SPINDLE > 1
+    if(report.spindle_id)
+        hal.stream.write_all(appendbuf(2, "|S:", uitoa((uint32_t)spindle_0->id)));
 #endif
 
     if(settings.status_report.pin_state) {
 
+        static const system_flags_t sys_switches = {
+            .block_delete_enabled = On,
+            .optional_stop_disable = On,
+            .single_block = On
+        };
+
         axes_signals_t lim_pin_state = limit_signals_merge(hal.limits.get_state());
         control_signals_t ctrl_pin_state = hal.control.get_state();
 
+        ctrl_pin_state.probe_triggered = probe_state.triggered;
+        ctrl_pin_state.probe_disconnected = !probe_state.connected;
         ctrl_pin_state.cycle_start |= sys.report.cycle_start;
+        if(sys.flags.value & sys_switches.value) {
+            if(!hal.signals_cap.stop_disable)
+                ctrl_pin_state.stop_disable = sys.flags.optional_stop_disable;
+            if(!hal.signals_cap.block_delete)
+                ctrl_pin_state.block_delete = sys.flags.block_delete_enabled;
+            if(!hal.signals_cap.single_block)
+                ctrl_pin_state.single_block = sys.flags.single_block;
+        }
 
-        if (lim_pin_state.value | ctrl_pin_state.value | probe_state.triggered | !probe_state.connected | sys.flags.block_delete_enabled) {
+        if(lim_pin_state.value | ctrl_pin_state.value) {
 
             char *append = &buf[4];
 
             strcpy(buf, "|Pn:");
 
-            if(probe_state.triggered)
-                *append++ = 'P';
-
-            if(!probe_state.connected)
-                *append++ = 'O';
-
             if(lim_pin_state.value && !ctrl_pin_state.limits_override)
                 append = axis_signals_tostring(append, lim_pin_state);
 
             if(ctrl_pin_state.value)
-                append = control_signals_tostring(append, ctrl_pin_state, false);
+                append = control_signals_tostring(append, ctrl_pin_state);
 
             *append = '\0';
             hal.stream.write_all(buf);
@@ -2040,7 +2071,9 @@ status_code_t report_setting_group_details (bool by_id, char *prefix)
 
         do {
             for(idx = 0; idx < details->n_groups; idx++) {
-                if(!group_is_dup(all_groups, details->groups[idx].id))
+                if(group_is_dup(all_groups, details->groups[idx].id))
+                    n_groups--;
+                else
                     *group++ = (setting_group_detail_t *)&details->groups[idx];
             }
         } while((details = details->next));
@@ -2079,7 +2112,7 @@ status_code_t report_last_signals_event (sys_state_t state, char *args)
 
     strcpy(buf, "[LASTEVENTS:");
 
-    append = control_signals_tostring(append, sys.last_event.control, false);
+    append = control_signals_tostring(append, sys.last_event.control);
     *append++ = ',';
     append = add_limits(append, sys.last_event.limits);
 
@@ -2146,11 +2179,27 @@ status_code_t report_spindle_data (sys_state_t state, char *args)
     return spindle->get_data ? Status_OK : Status_InvalidStatement;
 }
 
-static void report_pin (xbar_t *pin, void *data)
+// Prints info about registered pins.
+
+typedef struct {
+    uint8_t pin;
+    pin_function_t function;
+    char port[14];
+    const char *description;
+    uint32_t sortkey;
+} pin_info_t;
+
+typedef struct {
+    uint32_t idx;
+    uint32_t n_pins;
+    pin_info_t *pins;
+} pin_data_t;
+
+static void report_pin_info (pin_info_t *pin)
 {
     hal.stream.write("[PIN:");
-    if(pin->port)
-        hal.stream.write((char *)pin->port);
+    if(*pin->port)
+        hal.stream.write(pin->port);
     hal.stream.write(uitoa(pin->pin));
     hal.stream.write(",");
     hal.stream.write(xbar_fn_to_pinname(pin->function));
@@ -2161,13 +2210,198 @@ static void report_pin (xbar_t *pin, void *data)
     hal.stream.write("]" ASCII_EOL);
 }
 
+static pin_info_t *get_pin_info (xbar_t *pin, pin_info_t *info)
+{
+    info->function = pin->function;
+    info->pin = pin->pin;
+    info->description = pin->description;
+    info->sortkey = (pin->function << 8) | pin->id | (pin->group >= PinGroup_UART1 && pin->group <= PinGroup_UART4 ? pin->group << 16 : 0);
+    if(pin->port)
+        strcpy(info->port, (char *)pin->port);
+    else
+        *info->port = '\0';
+
+    return info;
+}
+
+static void count_pins (xbar_t *pin, void *data)
+{
+    ((pin_data_t *)data)->n_pins++;
+}
+
+static void get_pins (xbar_t *pin, void *data)
+{
+    get_pin_info(pin, &((pin_data_t *)data)->pins[((pin_data_t *)data)->idx++]);
+}
+
+static int cmp_pins (const void *a, const void *b)
+{
+    return ((pin_info_t *)a)->sortkey - ((pin_info_t *)b)->sortkey;
+}
+
+static void report_pin (xbar_t *pin, void *data)
+{
+    pin_info_t info;
+
+    report_pin_info(get_pin_info(pin, &info));
+}
+
 status_code_t report_pins (sys_state_t state, char *args)
 {
-    if(hal.enumerate_pins)
-        hal.enumerate_pins(false, report_pin, NULL);
+    pin_data_t pin_data = {0};
+
+    if(hal.enumerate_pins) {
+
+        hal.enumerate_pins(false, count_pins, (void *)&pin_data);
+
+        if((pin_data.pins = malloc(pin_data.n_pins * sizeof(pin_info_t)))) {
+
+            hal.enumerate_pins(false, get_pins, (void *)&pin_data);
+
+            qsort(pin_data.pins, pin_data.n_pins, sizeof(pin_info_t), cmp_pins);
+            for(pin_data.idx = 0; pin_data.idx < pin_data.n_pins; pin_data.idx++)
+                report_pin_info(&pin_data.pins[pin_data.idx]);
+
+            free(pin_data.pins);
+
+        } else
+            hal.enumerate_pins(false, report_pin, NULL);
+    }
 
     return Status_OK;
 }
+
+#ifndef NO_SETTINGS_DESCRIPTIONS
+
+static char *irq_mode (pin_irq_mode_t mode)
+{
+    switch(mode) {
+        case IRQ_Mode_Rising:
+            return "R";
+        case IRQ_Mode_Falling:
+            return "F";
+        case IRQ_Mode_RisingFalling:
+            return "T";
+        case IRQ_Mode_Change:
+            return "C";
+        case IRQ_Mode_Edges:
+            return "E";
+        case IRQ_Mode_High:
+            return "H";
+        case IRQ_Mode_Low:
+            return "L";
+        case IRQ_Mode_All:
+            return "A";
+        default:
+            break;
+    }
+
+    return "-";
+}
+
+static char *pull_mode (pull_mode_t mode)
+{
+    switch(mode) {
+        case PullMode_Up:
+            return "U";
+        case PullMode_Down:
+            return "D";
+        case PullMode_UpDown:
+            return "B";
+        default:
+            break;
+    }
+
+    return "-";
+}
+
+status_code_t report_pin_states (sys_state_t state, char *args)
+{
+    xbar_t *port;
+    uint8_t idx, ports;
+
+    if((ports = ioports_available(Port_Digital, Port_Input))) {
+        for(idx = 0; idx < ports; idx++) {
+            if((port = hal.port.get_pin_info(Port_Digital, Port_Input, idx))) {
+                hal.stream.write("[PINSTATE:DIN|");
+                hal.stream.write(port->description ? port->description : xbar_fn_to_pinname(port->function));
+                hal.stream.write("|");
+                hal.stream.write(uitoa(port->id));
+                hal.stream.write("|");
+                hal.stream.write(port->mode.inverted ? "I" : "N");
+                hal.stream.write(pull_mode((pull_mode_t)port->mode.pull_mode));
+                hal.stream.write(irq_mode((pin_irq_mode_t)port->mode.irq_mode));
+                hal.stream.write(port->mode.debounce ? "D" : "-");
+                hal.stream.write("|");
+                hal.stream.write(port->cap.invert ? "I" : "-");
+                hal.stream.write(pull_mode((pull_mode_t)port->cap.pull_mode));
+                hal.stream.write(irq_mode((pin_irq_mode_t)port->cap.irq_mode));
+                hal.stream.write(port->cap.debounce ? "D" : "-");
+                hal.stream.write("|");
+                hal.stream.write(port->get_value ? uitoa((uint32_t)port->get_value(port)) : "?");
+                hal.stream.write("]" ASCII_EOL);
+            }
+        }
+    }
+
+    if((ports = ioports_available(Port_Digital, Port_Output))) {
+        for(idx = 0; idx < ports; idx++) {
+            if((port = hal.port.get_pin_info(Port_Digital, Port_Output, idx))) {
+                hal.stream.write("[PINSTATE:DOUT|");
+                hal.stream.write(port->description ? port->description : xbar_fn_to_pinname(port->function));
+                hal.stream.write("|");
+                hal.stream.write(uitoa(port->id));
+                hal.stream.write("|");
+                hal.stream.write(port->mode.inverted ? "I" : "N");
+//                hal.stream.write(port->mode.pwm ? "P" : (port->mode.servo_pwm ? "S" : "N"));
+//                hal.stream.write(port->mode.open_drain ? "O" : "-");
+                hal.stream.write("|");
+                hal.stream.write(port->cap.invert ? "I" : "-");
+//                hal.stream.write(port->cap.pwm ? "P" : (port->cap.servo_pwm ? "S" : "N"));
+//                hal.stream.write(port->cap.open_drain ? "O" : "-");
+                hal.stream.write("|");
+                hal.stream.write(port->get_value ? uitoa((uint32_t)port->get_value(port)) : "?");
+                hal.stream.write("]" ASCII_EOL);
+            }
+        }
+    }
+
+    if((ports = ioports_available(Port_Analog, Port_Input))) {
+        for(idx = 0; idx < ports; idx++) {
+            if((port = hal.port.get_pin_info(Port_Analog, Port_Input, idx))) {
+                hal.stream.write("[PINSTATE:AIN|");
+                hal.stream.write(port->description);
+                hal.stream.write("|");
+                hal.stream.write(uitoa(port->id));
+                hal.stream.write("|||");
+                hal.stream.write(port->get_value ? ftoa((uint32_t)port->get_value(port), 2) : "?");
+                hal.stream.write("]" ASCII_EOL);
+            }
+        }
+    }
+
+    if((ports = ioports_available(Port_Analog, Port_Output))) {
+        for(idx = 0; idx < ports; idx++) {
+            if((port = hal.port.get_pin_info(Port_Analog, Port_Output, idx))) {
+                hal.stream.write("[PINSTATE:AOUT|");
+                hal.stream.write(port->description);
+                hal.stream.write("|");
+                hal.stream.write(uitoa(port->id));
+                hal.stream.write("|");
+                hal.stream.write(port->mode.pwm ? "P" : (port->mode.servo_pwm ? "S" : "N"));
+                hal.stream.write("|");
+                hal.stream.write(port->cap.pwm ? "P" : (port->cap.servo_pwm ? "S" : "N"));
+                hal.stream.write("|");
+                hal.stream.write(port->get_value ? ftoa((uint32_t)port->get_value(port), 2) : "?");
+                hal.stream.write("]" ASCII_EOL);
+            }
+        }
+    }
+
+    return Status_OK;
+}
+
+#endif
 
 static void print_uito2a (char *prefix, uint32_t v)
 {
@@ -2219,6 +2453,8 @@ static void report_spindle (spindle_info_t *spindle, void *data)
             *caps++ = 'D';
         if(spindle->hal->cap.laser)
             *caps++ = 'L';
+        if(spindle->hal->cap.laser && spindle->hal->pulse_on)
+            *caps++ = 'A';
         if(spindle->hal->cap.pid)
             *caps++ = 'P';
         if(spindle->hal->cap.pwm_invert)

@@ -236,7 +236,9 @@ typedef enum {
     LaserPPI_Enable = 126,              //!< 126 - M126
     LaserPPI_Rate = 127,                //!< 127 - M127
     LaserPPI_PulseLength = 128,         //!< 128 - M128
+    RGB_WriteLEDs = 150,                //!< 150 - M150, Marlin format
     OpenPNP_SetAcceleration = 204,      //!< 204 - M204
+    PWMServo_SetPosition= 280,          //!< 280 - M280, Marlin format
     RGB_Inspection_Light = 356,         //!< 356 - M356
     OpenPNP_FinishMoves = 400,          //!< 400 - M400
     Probe_Deploy = 401,                 //!< 401 - M401, Marlin format
@@ -384,6 +386,24 @@ typedef struct {
     float q;                   //!< User defined M-code parameter, M67 output value, G64 naive CAM tolerance, G83 delta increment
     float r;                   //!< Arc radius or retract position
     float s;                   //!< Spindle speed - single-meaning word
+#ifndef A_AXIS
+    float a;
+#endif
+#ifndef B_AXIS
+    float b;
+#endif
+#ifndef C_AXIS
+    float c;
+#endif
+#if !defined(U_AXIS) && !AXIS_REMAP_ABC2UVW
+    float u;
+#endif
+#if !defined(V_AXIS) && !AXIS_REMAP_ABC2UVW
+    float v;
+#endif
+#if !AXIS_REMAP_ABC2UVW
+    float w;
+#endif
     float xyz[N_AXIS];         //!< X,Y,Z (and A,B,C,U,V when enabled) translational axes
 #if LATHE_UVW_OPTION
     float uvw[3];              //!< U,V,W lathe mode incremental mode motion
@@ -514,6 +534,7 @@ typedef struct {
 typedef struct {
     float offset[N_AXIS];   //!< Tool offset
     float radius;           //!< Radius of tool (currently unsupported)
+// TODO: add float max_rpm; ?
     tool_id_t tool_id;      //!< Tool number
 } tool_data_t;
 
@@ -613,7 +634,7 @@ float gc_get_offset (uint_fast8_t idx);
 spindle_ptrs_t *gc_spindle_get (void);
 
 void gc_spindle_off (void);
-void gc_coolant_off (void);
+void gc_coolant (coolant_state_t state);
 
 void gc_set_tool_offset (tool_offset_mode_t mode, uint_fast8_t idx, int32_t offset);
 plane_t *gc_get_plane_data (plane_t *plane, plane_select_t select);
