@@ -3,23 +3,23 @@
 
   Part of grblHAL
 
-  Copyright (c) 2017-2023 Terje Io
+  Copyright (c) 2017-2024 Terje Io
   Copyright (c) 2011-2016 Sungeun K. Jeon for Gnea Research LLC
   Copyright (c) 2009-2011 Simen Svale Skogsrud
   Copyright (c) 2011 Jens Geisler
 
-  Grbl is free software: you can redistribute it and/or modify
+  grblHAL is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  Grbl is distributed in the hope that it will be useful,
+  grblHAL is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with Grbl.  If not, see <http://www.gnu.org/licenses/>.
+  along with grblHAL. If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <math.h>
@@ -455,12 +455,14 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
         block->spindle.css->delta_rpm = block->spindle.css->target_rpm - block->spindle.rpm;
     }
 
-    // Bail if this is a zero-length block. Highly unlikely to occur.
-    if (block->step_event_count == 0)
-        return false;
-
     pl_data->message = NULL;         // Indicate message is already queued for display on execution
     pl_data->output_commands = NULL; // Indicate commands are already queued for execution
+
+    // Bail if this is a zero-length block. Highly unlikely to occur.
+    if(block->step_event_count == 0) {
+        plan_cleanup(block); // TODO: output message and execute output_commands?
+        return false;
+    }
 
 #if N_AXIS > 3  && ROTARY_FIX
 
@@ -505,15 +507,15 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
     block->millimeters = convert_delta_vector_to_unit_vector(unit_vec);
     block->acceleration = limit_acceleration_by_axis_maximum(unit_vec);
     block->rapid_rate = limit_max_rate_by_axis_maximum(unit_vec);
+#ifdef KINEMATICS_API
+    block->rate_multiplier = pl_data->rate_multiplier;
+#endif
 
     // Store programmed rate.
     if (block->condition.rapid_motion)
         block->programmed_rate = block->rapid_rate;
     else {
         block->programmed_rate = pl_data->feed_rate;
-#ifdef KINEMATICS_API
-        block->rate_multiplier = pl_data->rate_multiplier;
-#endif
         if (block->condition.inverse_time)
             block->programmed_rate *= block->millimeters;
     }
@@ -639,7 +641,7 @@ void plan_cycle_reinitialize (void)
 {
     // Re-plan from a complete stop. Reset planner entry speeds and buffer planned pointer.
     st_update_plan_block_parameters();
-    block_buffer_planned = block_buffer_tail;
+    if((block_buffer_planned = block_buffer_tail) != block_buffer_head)
     planner_recalculate();
 }
 
@@ -694,6 +696,6 @@ void plan_data_init (plan_line_data_t *plan_data)
     plan_data->spindle.hal = gc_state.spindle.hal ? gc_state.spindle.hal : spindle_get(0);
     plan_data->condition.target_validated = plan_data->condition.target_valid = sys.soft_limits.mask == 0;
 #ifdef KINEMATICS_API
-    plan_data->rate_multiplier = 1.0;
+    plan_data->rate_multiplier = 1.0f;
 #endif
 }
