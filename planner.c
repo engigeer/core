@@ -402,7 +402,6 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
     block->line_number = pl_data->line_number;
     block->output_commands = pl_data->output_commands;
     block->message = pl_data->message;
-    pl_data->message = NULL;
 
     // Copy position data based on type of motion being planned.
     memcpy(position_steps, block->condition.system_motion ? sys.position : pl.position, sizeof(position_steps));
