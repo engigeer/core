@@ -1,5 +1,93 @@
 ## grblHAL changelog
 
+<a name="20240506"/>Build 20240506
+
+Core:
+
+* Fix for incorrect handling of some flow control statements when nested. Ref. issue [#504](https://github.com/grblHAL/core/issues/504).
+
+* Fixed defaults and added sanity checks for spindle linearization parameters settings.
+
+Drivers:
+
+* ESP32: increased max application size to 2 MB. __NOTE:__ settings and any WebUI files stored in littlefs will be overwritten on an update, backup and restore when updating!
+
+* STM32F1xx: removed stray debug message.
+
+* STM32F4xx: added printf/scanf support to STM32CubeIDE builds with spindle linearization enabled, due to run time issues.  
+Fixed incorrect EEPROM emulator flash section id, ref. core [discussion #503](https://github.com/grblHAL/core/discussions/503) and core [issue #457](https://github.com/grblHAL/core/issues/457).
+
+---
+
+<a name="20240427"/>Build 20240427
+
+Core:
+
+* Added config to enable NGC parameter reporting, default on.
+
+Drivers:
+
+* STM32F1xx: disabled NGC parameter reporting in order free up some flash space \(for 128K variants\).
+
+Plugins:
+
+* SD card (file system macros): added inbuilt `G65P2Q<tool>R<axis>` macro for reading tool offset from tool table. `<tool>` is tool number, `<axis>` is axis number: 0 = X, 1 = Y, ...
+
+* Keypad: allow MPG to take control when estop state is active.
+
+---
+
+<a name="20240425"/>Build 20240425
+
+Core:
+
+* Now reports WCO along with radius/diameter mode changes. Ref. issue [#500](https://github.com/grblHAL/core/issues/500).
+
+Drivers:
+
+* STM32F1xx: fix for broken handling of control signals for RC variant processors. Ref. issue [#51](https://github.com/grblHAL/STM32F1xx/issues/51) and discussion [#499](https://github.com/grblHAL/core/discussions/499).
+
+Plugins:
+
+* SD card (file system macros): added inbuilt `G65P1Q<n>` macro for reading numeric setting value. `<n>` is setting number. Ref. issue [#493](https://github.com/grblHAL/core/issues/493).
+
+---
+
+<a name="20240420"/>Build 20240420
+
+Core:
+
+* Fix for bug/compiler warning. Ref. discussion [#492](https://github.com/grblHAL/core/discussions/492).
+* Fix for broken initialization of wall plotter machine properties.
+
+---
+
+<a name="20240418"/>20240418
+
+Core:
+
+* Fix for compiler warning.
+
+Drivers:
+
+* ESP32: updated Root CNC v3 map and added Root CNC Pro map. Ref. issue [#102](https://github.com/grblHAL/ESP32/discussions/102).  
+Added missing comma. Ref. ioSender issue [#367](https://github.com/terjeio/ioSender/issues/367#issuecomment-2066416027).
+Added tentative support for additional I2C API functions.  
+
+* STM32F4xx: removed stray debug message, fixed I2C strobe and MPG mode input handling. Updated FatFS \(SPI\) to use new task scheduler.
+
+* STM32F7xx: fix for compiler warning.
+
+Plugins:
+
+* Keypad (display): workaround for ESP32 compiler complaining about `static_assert`.
+
+Templates:
+
+* Persistent tool: updated for core change.
+
+---
+
 <a name="20240416"/>Build 20240416
 
 Core:
