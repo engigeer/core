@@ -1,5 +1,37 @@
 ## grblHAL changelog
 
+<a name="20240513"/>Build 20240513
+
+Core:
+
+* Fix for homing setting regression. Ref. [issue #512](https://github.com/grblHAL/core/issues/512).
+
+Drivers:
+
+* STM32F1xx, STM32F3xx, STM32F4xx: made UART code fully core compliant.
+
+Plugins:
+
+* Networking: fixed ping response when no payload present. Ref. [issue #10](https://github.com/grblHAL/Plugin_networking/issues/10).
+
+---
+
+<a name="20240508"/>Build 20240508
+
+Core:
+
+* Fix for stream regression, improved MPG stream handling. Ref. [issue #509](https://github.com/grblHAL/core/issues/509).
+
+* Added NGC parameter 5599, debug output enabled status.
+
+Drivers:
+
+* ESP32: made UART code fully core compliant, fix for MQTT compilation error.
+
+* STM32F7xx: added missing MPG code, additional I2C port support and made UART code fully core compliant.
+
+---
+
 <a name="20240506"/>Build 20240506
 
 Core:
