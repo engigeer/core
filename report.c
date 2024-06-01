@@ -553,7 +553,7 @@ status_code_t report_ngc_parameter (ngc_param_id_t id)
     hal.stream.write(uitoa(id));
     if(ngc_param_get(id, &value)) {
         hal.stream.write("=");
-        hal.stream.write(ftoa(value, 3));
+        hal.stream.write(trim_float(ftoa(value, ngc_float_decimals())));
     } else
         hal.stream.write("=N/A");
     hal.stream.write("]" ASCII_EOL);
@@ -570,7 +570,7 @@ status_code_t report_named_ngc_parameter (char *arg)
     hal.stream.write(arg);
     if(ngc_named_param_get(arg, &value)) {
         hal.stream.write("=");
-        hal.stream.write(ftoa(value, 3));
+        hal.stream.write(trim_float(ftoa(value, ngc_float_decimals())));
     } else
         hal.stream.write("=N/A");
     hal.stream.write("]" ASCII_EOL);
@@ -1171,11 +1171,11 @@ void report_realtime_status (void)
 
     uint_fast8_t idx;
     float wco[N_AXIS];
-    if (!settings.status_report.machine_position || report.wco) {
-        for (idx = 0; idx < N_AXIS; idx++) {
+    if(!settings.status_report.machine_position || report.wco) {
+        for(idx = 0; idx < N_AXIS; idx++) {
             // Apply work coordinate offsets and tool length offset to current position.
-            wco[idx] = gc_get_offset(idx);
-            if (!settings.status_report.machine_position)
+            wco[idx] = gc_get_offset(idx, true);
+            if(!settings.status_report.machine_position)
                 print_position[idx] -= wco[idx];
         }
     }
@@ -1281,13 +1281,13 @@ void report_realtime_status (void)
     if(settings.status_report.work_coord_offset) {
 
         if(wco_counter > 0 && !report.wco) {
-            if(wco_counter > (REPORT_WCO_REFRESH_IDLE_COUNT - 1) && state_get() == STATE_IDLE)
+            if(wco_counter > (REPORT_WCO_REFRESH_IDLE_COUNT - 1) && state == STATE_IDLE)
                 wco_counter = REPORT_WCO_REFRESH_IDLE_COUNT - 1;
             wco_counter--;
         } else
-            wco_counter = state_get() & (STATE_HOMING|STATE_CYCLE|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
-                            ? (REPORT_WCO_REFRESH_BUSY_COUNT - 1) // Reset counter for slow refresh
-                            : (REPORT_WCO_REFRESH_IDLE_COUNT - 1);
+            wco_counter = state & (STATE_HOMING|STATE_CYCLE|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
+                           ? (REPORT_WCO_REFRESH_BUSY_COUNT - 1) // Reset counter for slow refresh
+                           : (REPORT_WCO_REFRESH_IDLE_COUNT - 1);
     } else
         report.wco = Off;
 
@@ -1298,9 +1298,9 @@ void report_realtime_status (void)
         else if((report.overrides = !report.wco)) {
             report.spindle = report.spindle || spindle_0_state.on;
             report.coolant = report.coolant || hal.coolant.get_state().value != 0;
-            override_counter = state_get() & (STATE_HOMING|STATE_CYCLE|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
-                                 ? (REPORT_OVERRIDE_REFRESH_BUSY_COUNT - 1) // Reset counter for slow refresh
-                                 : (REPORT_OVERRIDE_REFRESH_IDLE_COUNT - 1);
+            override_counter = state & (STATE_HOMING|STATE_CYCLE|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
+                                ? (REPORT_OVERRIDE_REFRESH_BUSY_COUNT - 1) // Reset counter for slow refresh
+                                : (REPORT_OVERRIDE_REFRESH_IDLE_COUNT - 1);
         }
     } else
         report.overrides = Off;
@@ -1308,8 +1308,14 @@ void report_realtime_status (void)
     if(report.value || gc_state.tool_change) {
 
         if(report.wco) {
-            hal.stream.write_all("|WCO:");
-            hal.stream.write_all(get_axis_values(wco));
+            // If protocol_buffer_synchronize() is running
+            // delay outputting WCO until sync is completed
+            // unless requested from stepper_driver_interrupt_handler.
+            if(report.force_wco || !sys.flags.synchronizing) {
+                hal.stream.write_all("|WCO:");
+                hal.stream.write_all(get_axis_values(wco));
+            } else
+                wco_counter = 0;
         }
 
         if(report.gwco) {
