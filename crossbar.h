@@ -583,6 +583,9 @@ typedef struct {
     float off_value; // percent of period
     float min_value; // percent of period
     float max_value; // percent of period
+    float quadratic; // curvature mapping
+    float linear; // curvature mapping
+    float constant; // curvature mapping
     bool invert;
     bool servo_mode;
 } pwm_config_t;

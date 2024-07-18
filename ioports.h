@@ -162,6 +162,9 @@ typedef struct {
     uint_fast16_t max_value;
     float min;                  //!< Minimum analog input value.
     float pwm_gradient;
+    float pwm_quadratic;
+    float pwm_linear;
+    float pwm_constant;
     bool invert_pwm;            //!< NOTE: set (by driver) when inversion is done in code
     bool always_on;
 } ioports_pwm_t;
