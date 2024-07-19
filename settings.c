@@ -1392,11 +1392,17 @@ static status_code_t set_linear_piece (setting_id_t id, char *svalue)
 {
     uint32_t idx = id - Setting_LinearSpindlePiece1;
     float rpm, start, end;
+    int rpmi1, rpmi2, starti1, starti2, endi1, endi2;
+
 
     if(*svalue == '\0' || (svalue[0] == '0' && svalue[1] == '\0')) {
         settings.spindle.pwm_piece[idx].rpm = NAN;
         settings.spindle.pwm_piece[idx].start =
         settings.spindle.pwm_piece[idx].end = 0.0f;
+    } else if(sscanf(svalue, "%i,%i,%i,%i,%i,%i", &rpmi1, &rpmi2, &starti1, &starti2, &endi1, &endi2) == 6) {
+        settings.spindle.pwm_piece[idx].rpm = rpmi1*powf(10,rpmi2);
+        settings.spindle.pwm_piece[idx].start = starti1*powf(10,starti2);
+        settings.spindle.pwm_piece[idx].end = endi1*powf(10,endi2);
     } else if(sscanf(svalue, "%f,%f,%f", &rpm, &start, &end) == 3) {
         settings.spindle.pwm_piece[idx].rpm = rpm;
         settings.spindle.pwm_piece[idx].start = start;

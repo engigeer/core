@@ -1134,13 +1134,13 @@ Defines the parameters for the first entry in the spindle RPM linearization tabl
 */
 ///@{
 #if !defined DEFAULT_RPM_POINT01 || defined __DOXYGEN__
-#define DEFAULT_RPM_POINT01 NAN // DEFAULT_SPINDLE_RPM_MIN  // Replace NAN with DEFAULT_SPINDLE_RPM_MIN to enable.
+#define DEFAULT_RPM_POINT01 70.4f // DEFAULT_SPINDLE_RPM_MIN  // Replace NAN with DEFAULT_SPINDLE_RPM_MIN to enable.
 #endif
 #if !defined DEFAULT_RPM_LINE_A1 || defined __DOXYGEN__
-#define DEFAULT_RPM_LINE_A1 3.197101e-03f
+#define DEFAULT_RPM_LINE_A1 9.958431e-01f
 #endif
 #if !defined DEFAULT_RPM_LINE_B1 || defined __DOXYGEN__
-#define DEFAULT_RPM_LINE_B1 -3.526076e-1f
+#define DEFAULT_RPM_LINE_B1 2.005857e+01f
 #endif
 ///@}
 
@@ -1149,13 +1149,13 @@ Defines the parameters for the second entry in the spindle RPM linearization tab
 */
 ///@{
 #if !defined DEFAULT_RPM_POINT12 || defined __DOXYGEN__
-#define DEFAULT_RPM_POINT12 NAN  // Change NAN to a float constant to enable.
+#define DEFAULT_RPM_POINT12 120.6f  // Change NAN to a float constant to enable.
 #endif
 #if !defined DEFAULT_RPM_LINE_A2 || defined __DOXYGEN__
-#define DEFAULT_RPM_LINE_A2  1.722950e-2f
+#define DEFAULT_RPM_LINE_A2  1.192291e+00f
 #endif
 #if !defined DEFAULT_RPM_LINE_B2 || defined __DOXYGEN__
-#define DEFAULT_RPM_LINE_B2  1.0f,
+#define DEFAULT_RPM_LINE_B2  4.374225e+01f,
 #endif
 ///@}
 
@@ -1164,13 +1164,13 @@ Defines the parameters for the third entry in the spindle RPM linearization tabl
 */
 ///@{
 #if !defined DEFAULT_RPM_POINT23 || defined __DOXYGEN__
-#define DEFAULT_RPM_POINT23 NAN  // Change NAN to a float constant to enable.
+#define DEFAULT_RPM_POINT23 204.4f  // Change NAN to a float constant to enable.
 #endif
 #if !defined DEFAULT_RPM_LINE_A3 || defined __DOXYGEN__
-#define DEFAULT_RPM_LINE_A3 5.901518e-02f
+#define DEFAULT_RPM_LINE_A3 1.354565e+00f
 #endif
 #if !defined DEFAULT_RPM_LINE_B3 || defined __DOXYGEN__
-#define DEFAULT_RPM_LINE_B3 4.881851e+02f
+#define DEFAULT_RPM_LINE_B3 7.691631e+01f
 #endif
 ///@}
 
@@ -1179,13 +1179,13 @@ Defines the parameters for the fourth entry in the spindle RPM linearization tab
 */
 ///@{
 #if !defined DEFAULT_RPM_POINT34 || defined __DOXYGEN__
-#define DEFAULT_RPM_POINT34 NAN  // Change NAN to a float constant to enable.
+#define DEFAULT_RPM_POINT34 278.3f  // Change NAN to a float constant to enable.
 #endif
 #if !defined DEFAULT_RPM_LINE_A4 || defined __DOXYGEN__
-#define DEFAULT_RPM_LINE_A4  1.203413e-01f
+#define DEFAULT_RPM_LINE_A4  8.40904e-01f
 #endif
 #if !defined DEFAULT_RPM_LINE_B4 || defined __DOXYGEN__
-#define DEFAULT_RPM_LINE_B4  1.151360e+03f
+#define DEFAULT_RPM_LINE_B4  -6.601303e+01f
 #endif
 ///@}
 
