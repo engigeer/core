@@ -713,7 +713,7 @@ static uint_fast16_t spindle_compute_pwm_value (spindle_pwm_t *pwm_data, float r
             do {
                 idx--;
                 if(idx == 0 || rpm > pwm_data->piece[idx].rpm) {
-                    pwm_value = floorf((pwm_data->piece[idx].start * rpm - pwm_data->piece[idx].end) * pwm_data->pwm_gradient);
+                    pwm_value = floorf((pwm_data->piece[idx].start * rpm - pwm_data->rpm_min - pwm_data->piece[idx].end) * pwm_data->pwm_gradient) + pwm_data->min_value;
                     break;
                 }
             } while(idx);
