@@ -39,7 +39,7 @@ specific needs, i.e. performance tuning or adjusting to non-typical machines.
 If more than 3 axes are configured a compliant driver and board map file is needed.
  */
 #ifndef N_AXIS
-#define N_AXIS 3 // Number of axes
+#define N_AXIS 4 // Number of axes
 #endif
 
 /*! \def AXIS_REMAP_ABC2UVW
@@ -55,14 +55,14 @@ If more than 3 axes are configured a compliant driver and board map file is need
 \brief Defines number of spindles supported - minimum 1, maximum 32.
 */
 #if !defined N_SPINDLE || defined __DOXYGEN__
-#define N_SPINDLE 1
+#define N_SPINDLE 2
 #endif
 
 /*! \def N_SYS_SPINDLE
 \brief Defines number of simultaneously active spindles supported - minimum 1 (none), maximum 8.
 */
 #if !defined N_SYS_SPINDLE || defined __DOXYGEN__
-#define N_SYS_SPINDLE 1
+#define N_SYS_SPINDLE 2
 #endif
 
 /*! \def BUILD_INFO
