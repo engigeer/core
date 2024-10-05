@@ -1765,9 +1765,12 @@ status_code_t gc_execute_block (char *block)
                 FAIL(single_spindle_only ? Status_NegativeValue : Status_GcodeValueOutOfRange);
             if(!spindle_is_enabled(gc_block.values.$))
                 FAIL(Status_GcodeValueOutOfRange);
-            if(gc_block.values.$ >= 0)
+            if(gc_block.values.$ >= 0) {
+                bool spindle_id_changed = gc_block.values.$ != gc_state.spindle.hal->id; 
                 gc_state.spindle.hal = gc_block.spindle = spindle_get(gc_block.values.$);
+                gc_state.modal.spindle.state.reserved = spindle_id_changed;
             gc_block.words.$ = Off;
+            }
         }
     } else if(gc_block.spindle == NULL)
         gc_block.spindle = gc_state.spindle.hal;
