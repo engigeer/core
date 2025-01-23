@@ -97,7 +97,11 @@ static segment_t *segment_buffer_head, *segment_next_head;
 
 #if ENABLE_JERK_ACCELERATION
 // Static storage for acceleration value of last computed segment.   
-static float last_segment_accel = 0.0f;
+float static volatile last_segment_accel = 0.0f;
+float volatile tock_segment_accel = 0.0f;
+float volatile this_segment_accel = 0.0f;
+float static volatile ticktock_var = -1.0f;
+bool static tock_var = false;
 #endif
 
 // Pointers for the step segment being prepped from the planner buffer. Accessed only by the
@@ -124,7 +128,7 @@ typedef struct {
     ramp_type_t ramp_type;  // Current segment ramp state
     float mm_complete;      // End of velocity profile from end of current planner block in (mm).
                             // NOTE: This value must coincide with a step(no mantissa) when converted.
-    float current_speed;    // Current speed at the end of the segment buffer (mm/min)
+    volatile float current_speed;    // Current speed at the end of the segment buffer (mm/min)
     float maximum_speed;    // Maximum speed of executing block. Not always nominal speed. (mm/min)
     float exit_speed;       // Exit speed of executing block (mm/min)
 #ifdef KINEMATICS_API
@@ -872,12 +876,15 @@ void st_prep_buffer (void)
         float dt = 0.0f; // Initialize segment time
         float time_var = dt_max; // Time worker variable
         float mm_var; // mm - Distance worker variable
-        float speed_var; // Speed worker variable
+        float volatile speed_var; // Speed worker variable
+        float volatile accel_diff;
+        float volatile speed_diff;
+        float volatile time_check;
         float mm_remaining = pl_block->millimeters; // New segment distance from end of block.
         float minimum_mm = mm_remaining - prep.req_mm_increment; // Guarantee at least one step.
 #if ENABLE_ACCELERATION_PROFILES
         float time_to_jerk;     // time needed for jerk ramp
-        float jerk_rampdown;    // calculated startpoint of jerk rampdown
+        float volatile jerk_rampdown;    // calculated startpoint of jerk rampdown
 #endif
 
         if (minimum_mm < 0.0f)
@@ -943,6 +950,8 @@ void st_prep_buffer (void)
                         time_var = (mm_remaining - prep.decelerate_after) / prep.maximum_speed;
                         mm_remaining = prep.decelerate_after; // NOTE: 0.0 at EOB
                         prep.ramp_type = Ramp_Decel;
+                        ticktock_var = -1.0f;
+                        tock_var = false;
                     } else // Cruising only.
                         mm_remaining = mm_var;
                     break;
@@ -952,19 +961,92 @@ void st_prep_buffer (void)
 #if ENABLE_JERK_ACCELERATION   
                     time_to_jerk = last_segment_accel / pl_block->jerk;
                     jerk_rampdown = prep.exit_speed + time_to_jerk * (last_segment_accel - (0.5f * pl_block->jerk * time_to_jerk)); // Speedpoint to start ramping down deceleration. (V = a * t - 1/2 j * t^2)
-                    if (prep.current_speed > jerk_rampdown) {
-                        // Check if we are on ramp up or ramp down. Ramp down if speed is less than speed needed for reaching 0 acceleration.
-                        // Then limit acceleration change by jerk up to max acceleration and update for next segment.
-                        // Minimum acceleration of jerk per time_var to ensure deceleration completes. Acceleration change at end of ramp is in acceptable jerk range.
-                        last_segment_accel = min(last_segment_accel + pl_block->jerk * time_var, pl_block->max_acceleration); 
-                    } else {
-                        last_segment_accel = max(last_segment_accel - pl_block->jerk * time_var, pl_block->jerk * time_var);  
+                    //debug_print("[Decel Ramp: %8.6f remaining: %8.6f rampendpos: %8.6f speed: %10.6f rampendspeed: %10.6f accel: %10.6f ]", mm_remaining, mm_to_rampend, prep.current_speed, speed_to_rampend, last_segment_accel);
+                    
+                    if (tock_var) { //Accel in second half (tock) of time_var already computed
+                        this_segment_accel = tock_segment_accel;
+                        tock_var = false;
                     }
-                    speed_var = last_segment_accel * time_var; // Used as delta speed (mm/min)
+                    else if (last_segment_accel == 0.0f ) { //First transition from cruise or accel
+                        this_segment_accel = min(0.5 * pl_block->jerk * time_var, pl_block->max_acceleration);
+                        last_segment_accel = min(pl_block->jerk * time_var, pl_block->max_acceleration);
+                        ticktock_var = 0.166666667 * (dt_max - 2 * time_var) /  dt_max; // FLAG TO ENTER TRANSITION LOOP BELOW
+                    }
+                    else{ 
+                        speed_diff = (jerk_rampdown + last_segment_accel * time_var - prep.current_speed) / (last_segment_accel * time_var);
+                        if (speed_diff > 0) { // RAMP DOWN
+                            // Check if transition from max accel
+                            if (last_segment_accel == pl_block->max_acceleration) { 
+                                ticktock_var = 0.166666667 * speed_diff * (3 * speed_diff - 2);
+                                this_segment_accel = min(last_segment_accel - ticktock_var * pl_block->jerk * time_var, 1.1 * pl_block->max_acceleration); 
+                                    
+                                ticktock_var = 0.166666667 * speed_diff * (3 * speed_diff + 2);
+                                tock_segment_accel = min(last_segment_accel - ticktock_var * pl_block->jerk * time_var, 1.1 * pl_block->max_acceleration);     
+                                last_segment_accel = max(last_segment_accel - speed_diff * pl_block->jerk * time_var, 0.166666667 * pl_block->jerk * time_var);
+                                
+                                ticktock_var = -1.0f;
+                                time_var = 0.5 * time_var; // set tick segment to 1/2 step
+                                tock_var = true;
+                            }
+                            else {
+                                this_segment_accel = max(last_segment_accel - 0.166666667 * pl_block->jerk * time_var, 0.166666667 * pl_block->jerk * time_var); 
+                                tock_segment_accel = max(last_segment_accel - 0.833333333 * pl_block->jerk * time_var, 0.166666667 * pl_block->jerk * time_var); 
+                                last_segment_accel = max(last_segment_accel - pl_block->jerk * time_var, 0.166666667 * pl_block->jerk * time_var);
+                            
+                                time_var = 0.5 * time_var; // set tick segment to 1/2 step
+                                tock_var = true;
+                            }
+                        }
+                        else { // RAMP UP OR MAX ACCEL
+                            accel_diff = (last_segment_accel + pl_block->jerk * time_var - pl_block->max_acceleration) / (pl_block->jerk * time_var); // current accel diff
+                            // Check if first transition from cruise
+                            if (ticktock_var > -1.0f) {
+                                this_segment_accel = min(last_segment_accel + ticktock_var * pl_block->jerk * time_var, pl_block->max_acceleration); 
+                                    
+                                ticktock_var = 1 - ticktock_var;
+                                tock_segment_accel = min(last_segment_accel + ticktock_var * pl_block->jerk * time_var, pl_block->max_acceleration);     
+                                last_segment_accel = min(last_segment_accel + pl_block->jerk * time_var, pl_block->max_acceleration);
+                               
+                                ticktock_var = -1.0f;
+                                time_var = 0.5 * time_var; // set tick segment to 1/2 step
+                                tock_var = true;    
+                            }
+                            // Check if max acceleration point has been reached
+                            else if (accel_diff > 0) {
+                                if (last_segment_accel < pl_block->max_acceleration) { // allow slight violation of max accel on ramp transition
+                                    ticktock_var = 0.166666667 * (1 - (accel_diff) * (3 * (accel_diff) -2 ));
+                                    this_segment_accel = min(last_segment_accel + ticktock_var * pl_block->jerk * time_var, 1.1 * pl_block->max_acceleration); 
+
+                                    ticktock_var = 0.166666667 * (5 - (accel_diff) * (3 * (accel_diff) + 2));
+                                    tock_segment_accel = min(last_segment_accel + ticktock_var * pl_block->jerk * time_var, 1.1 * pl_block->max_acceleration);
+                                    last_segment_accel = min(last_segment_accel + pl_block->jerk * time_var, 1.1 * pl_block->max_acceleration);
+                                    
+                                    ticktock_var = -1.0f;
+                                    time_var = 0.5 * time_var; // set tick segment to 1/2 step
+                                    tock_var = true;                               
+                                }
+                                else { // keep at max acceleration
+                                    this_segment_accel = pl_block->max_acceleration;
+                                    last_segment_accel = pl_block->max_acceleration;
+                                }
+                            }
+                            else {
+                                this_segment_accel = min(last_segment_accel + 0.166666667 * pl_block->jerk * time_var, pl_block->max_acceleration); 
+                                tock_segment_accel = min(last_segment_accel + 0.833333333 * pl_block->jerk * time_var, pl_block->max_acceleration); 
+                                last_segment_accel = min(last_segment_accel + pl_block->jerk * time_var, pl_block->max_acceleration);
+
+                                time_var = 0.5 * time_var; // set tick segment to 1/2 step
+                                tock_var = true;
+                            }
+                        }
+                    }
+
+                    speed_var = this_segment_accel * time_var; // Used as delta speed (mm/min)
 #else
                     speed_var = pl_block->acceleration * time_var; // Used as delta speed (mm/min)
 #endif
-                    if (prep.current_speed > speed_var) { // Check if at or below zero speed.
+                    time_check = (mm_remaining - prep.mm_complete) / (prep.current_speed + prep.exit_speed);
+                    if ((prep.current_speed > speed_var) && (time_check > time_var)){ // Check if at or below zero speed.
                         // Compute distance from end of segment to end of block.
                         mm_var = mm_remaining - time_var * (prep.current_speed - 0.5f * speed_var); // (mm)
                         if (mm_var > prep.mm_complete) { // Typical case. In deceleration ramp.
@@ -974,7 +1056,7 @@ void st_prep_buffer (void)
                         }
                     }
                     // Otherwise, at end of block or end of forced-deceleration.
-                    time_var = 2.0f * (mm_remaining - prep.mm_complete) / (prep.current_speed + prep.exit_speed);
+                    time_var = 2.0f * time_check;
                     mm_remaining = prep.mm_complete;
                     prep.current_speed = prep.exit_speed;
 #if ENABLE_JERK_ACCELERATION
