@@ -950,8 +950,10 @@ void st_prep_buffer (void)
                         time_var = (mm_remaining - prep.decelerate_after) / prep.maximum_speed;
                         mm_remaining = prep.decelerate_after; // NOTE: 0.0 at EOB
                         prep.ramp_type = Ramp_Decel;
+#if ENABLE_JERK_ACCELERATION
                         ticktock_var = -1.0f;
                         tock_var = false;
+#endif
                     } else // Cruising only.
                         mm_remaining = mm_var;
                     break;
