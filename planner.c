@@ -194,13 +194,9 @@ inline static void plan_cleanup (plan_block_t *block)
         block->message = NULL;
     }
 
-    while(block->output_commands) {
-        output_command_t *next = block->output_commands->next;
-        free(block->output_commands);
-        block->output_commands = next;
-    }
+    if(block->output_commands)
+        gc_clear_output_commands(block->output_commands);
 }
-
 
 inline static void plan_reset_buffer (void)
 {
@@ -468,13 +464,12 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
         block->spindle.css->delta_rpm = block->spindle.css->target_rpm - block->spindle.rpm;
     }
 
-    pl_data->message = NULL;         // Indicate message is already queued for display on execution
-    pl_data->output_commands = NULL; // Indicate commands are already queued for execution
-
     // Bail if this is a zero-length block. Highly unlikely to occur.
-    if(block->step_event_count == 0) {
-        plan_cleanup(block); // TODO: output message and execute output_commands?
+    if(block->step_event_count == 0)
         return false;
+    else {
+        pl_data->message = NULL;         // Indicate message is already queued for display on execution
+        pl_data->output_commands = NULL; // Indicate commands are already queued for execution
     }
 
 #if N_AXIS > 3  && ROTARY_FIX
@@ -556,7 +551,7 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
     // Profiles are calculated as symmetrical (calculate to 1/2 programmed rate, then double)
     float time_to_max_accel = block->max_acceleration / block->jerk;    // unit: min - time it takes to reach max acceleration 
     float speed_after_jerkramp = 0.5f * block->jerk * time_to_max_accel * time_to_max_accel;   // unit: mm / min - velocity after one completed jerk ramp up - Vt = V0 + A0T + 1/2 jerk*T
-    if (0.5*block->programmed_rate > speed_after_jerkramp)
+    if(0.5f * block->programmed_rate > speed_after_jerkramp)
         // Profile time = 2x (1 complete jerk ramp + additional time at max_accel to reach desired speed)
         block->acceleration = block->programmed_rate / (2.0f *(time_to_max_accel + (0.5f * block->programmed_rate - speed_after_jerkramp) / block->max_acceleration));     
     else 

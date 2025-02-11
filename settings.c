@@ -454,6 +454,9 @@ static char axis_steps[9] = "step/mm";
 static struct {
     bool valid;
     float acceleration[N_AXIS];
+#if ENABLE_JERK_ACCELERATION
+    float jerk[N_AXIS];
+#endif
 } override_backup = { .valid = false };
 
 static void save_override_backup (void)
@@ -463,6 +466,9 @@ static void save_override_backup (void)
     do {
         idx--;
         override_backup.acceleration[idx] = settings.axis[idx].acceleration;
+#if ENABLE_JERK_ACCELERATION
+        override_backup.jerk[idx] = settings.axis[idx].jerk;
+#endif
     } while(idx);
 
     override_backup.valid = true;
@@ -475,6 +481,9 @@ static void restore_override_backup (void)
     if(override_backup.valid) do {
         idx--;
         settings.axis[idx].acceleration = override_backup.acceleration[idx];
+#if ENABLE_JERK_ACCELERATION
+        settings.axis[idx].jerk = override_backup.jerk[idx];
+#endif
     } while(idx);
 }
 
@@ -498,6 +507,31 @@ bool settings_override_acceleration (uint8_t axis, float acceleration)
 
     return true;
 }
+
+#if ENABLE_JERK_ACCELERATION
+
+// Temporarily override jerk, if 0 restore to setting value.
+// Note: only allowed when current state is idle.
+bool settings_override_jerk (uint8_t axis, float jerk)
+{
+    sys_state_t state = state_get();
+
+    if(!(state == STATE_IDLE || (state & (STATE_HOMING|STATE_ALARM))))
+        return false;
+
+    if(jerk <= 0.0f) {
+        if(override_backup.valid)
+            settings.axis[axis].jerk = override_backup.jerk[axis];
+    } else {
+        if(!override_backup.valid)
+            save_override_backup();
+        settings.axis[axis].jerk = jerk * 60.0f * 60.0f * 60.0f; // Limit max to setting value?
+    }
+
+    return true;
+}
+
+#endif // ENABLE_JERK_ACCELERATION
 
 // ---
 
@@ -1205,7 +1239,7 @@ static status_code_t set_axis_setting (setting_id_t setting, float value)
 
 #if ENABLE_JERK_ACCELERATION      
         case Setting_AxisJerk:
-                settings.axis[idx].jerk = value * 60.0f * 60.0f * 60.0f; // Convert to mm/min^3 for internal use.
+            settings.axis[idx].jerk = override_backup.jerk[idx] = value * 60.0f * 60.0f * 60.0f; // Convert to mm/min^3 for internal use.
             break;
 #endif            
 
@@ -1779,6 +1813,15 @@ static bool is_setting_available (const setting_detail_t *setting, uint_fast16_t
             available = SLEEP_DURATION > 0.0f;
             break;
 
+        case Setting_ToolChangeMode:
+        case Setting_ToolChangeProbingDistance:
+        case Setting_ToolChangeFeedRate:
+        case Setting_ToolChangeSeekRate:
+        case Setting_ToolChangePulloffRate:
+        case Setting_ToolChangeRestorePosition:
+            available = !hal.driver_cap.atc;
+            break;
+
         case Setting_DualAxisLengthFailPercent:
         case Setting_DualAxisLengthFailMin:
         case Setting_DualAxisLengthFailMax:
@@ -2051,12 +2094,12 @@ PROGMEM static const setting_detail_t setting_detail[] = {
      { Setting_AxisHomingFeedRate, Group_Axis0, "-axis homing locate feed rate", axis_rate, Format_Decimal, "###0", NULL, NULL, Setting_NonCoreFn, set_axis_setting, get_float, is_setting_available, AXIS_OPTS },
      { Setting_AxisHomingSeekRate, Group_Axis0, "-axis homing search seek rate", axis_rate, Format_Decimal, "###0", NULL, NULL, Setting_NonCoreFn, set_axis_setting, get_float, is_setting_available, AXIS_OPTS },
      { Setting_SpindleAtSpeedTolerance, Group_Spindle, "Spindle at speed tolerance", "percent", Format_Decimal, "##0.0", NULL, NULL, Setting_IsExtendedFn, set_float, get_float, is_setting_available },
-     { Setting_ToolChangeMode, Group_Toolchange, "Tool change mode", NULL, Format_RadioButtons, "Normal,Manual touch off,Manual touch off @ G59.3,Automatic touch off @ G59.3,Ignore M6", NULL, NULL, Setting_IsExtendedFn, set_tool_change_mode, get_int, NULL },
-     { Setting_ToolChangeProbingDistance, Group_Toolchange, "Tool change probing distance", "mm", Format_Decimal, "#####0.0", NULL, NULL, Setting_IsExtendedFn, set_tool_change_probing_distance, get_float, NULL },
-     { Setting_ToolChangeFeedRate, Group_Toolchange, "Tool change locate feed rate", "mm/min", Format_Decimal, "#####0.0", NULL, NULL, Setting_IsExtended, &settings.tool_change.feed_rate, NULL, NULL },
-     { Setting_ToolChangeSeekRate, Group_Toolchange, "Tool change search seek rate", "mm/min", Format_Decimal, "#####0.0", NULL, NULL, Setting_IsExtended, &settings.tool_change.seek_rate, NULL, NULL },
-     { Setting_ToolChangePulloffRate, Group_Toolchange, "Tool change probe pull-off rate", "mm/min", Format_Decimal, "#####0.0", NULL, NULL, Setting_IsExtended, &settings.tool_change.pulloff_rate, NULL, NULL },
-     { Setting_ToolChangeRestorePosition, Group_Toolchange, "Restore position after M6", NULL, Format_Bool, NULL, NULL, NULL, Setting_IsExtendedFn, set_tool_restore_pos, get_int, NULL },
+     { Setting_ToolChangeMode, Group_Toolchange, "Tool change mode", NULL, Format_RadioButtons, "Normal,Manual touch off,Manual touch off @ G59.3,Automatic touch off @ G59.3,Ignore M6", NULL, NULL, Setting_IsExtendedFn, set_tool_change_mode, get_int, is_setting_available },
+     { Setting_ToolChangeProbingDistance, Group_Toolchange, "Tool change probing distance", "mm", Format_Decimal, "#####0.0", NULL, NULL, Setting_IsExtendedFn, set_tool_change_probing_distance, get_float, is_setting_available },
+     { Setting_ToolChangeFeedRate, Group_Toolchange, "Tool change locate feed rate", "mm/min", Format_Decimal, "#####0.0", NULL, NULL, Setting_IsExtended, &settings.tool_change.feed_rate, NULL, is_setting_available },
+     { Setting_ToolChangeSeekRate, Group_Toolchange, "Tool change search seek rate", "mm/min", Format_Decimal, "#####0.0", NULL, NULL, Setting_IsExtended, &settings.tool_change.seek_rate, NULL, is_setting_available },
+     { Setting_ToolChangePulloffRate, Group_Toolchange, "Tool change probe pull-off rate", "mm/min", Format_Decimal, "#####0.0", NULL, NULL, Setting_IsExtended, &settings.tool_change.pulloff_rate, NULL, is_setting_available },
+     { Setting_ToolChangeRestorePosition, Group_Toolchange, "Restore position after M6", NULL, Format_Bool, NULL, NULL, NULL, Setting_IsExtendedFn, set_tool_restore_pos, get_int, is_setting_available },
      { Setting_DualAxisLengthFailPercent, Group_Limits_DualAxis, "Dual axis length fail", "percent", Format_Decimal, "##0.0", "0", "100", Setting_IsExtended, &settings.homing.dual_axis.fail_length_percent, NULL, is_setting_available },
      { Setting_DualAxisLengthFailMin, Group_Limits_DualAxis, "Dual axis length fail min", "mm", Format_Decimal, "#####0.000", NULL, NULL, Setting_IsExtended, &settings.homing.dual_axis.fail_distance_min, NULL, is_setting_available },
      { Setting_DualAxisLengthFailMax, Group_Limits_DualAxis, "Dual axis length fail max", "mm", Format_Decimal, "#####0.000", NULL, NULL, Setting_IsExtended, &settings.homing.dual_axis.fail_distance_max, NULL, is_setting_available },
@@ -2547,11 +2590,12 @@ void settings_restore (settings_restore_t restore)
     if(restore.parameters) {
         float coord_data[N_AXIS];
         memset(coord_data, 0, sizeof(coord_data));
+#if COMPATIBILITY_LEVEL <= 1
         for(idx = 0; idx <= N_WorkCoordinateSystems; idx++) {
             if(idx < CoordinateSystem_G59_1 || idx > CoordinateSystem_G59_3 || bit_isfalse(settings.offset_lock.mask, bit(idx - CoordinateSystem_G59_1)))
                 settings_write_coord_data((coord_system_id_t)idx, &coord_data);
         }
-
+#endif
         settings_write_coord_data(CoordinateSystem_G92, &coord_data); // Clear G92 offsets
 
 #if N_TOOLS
@@ -2661,11 +2705,14 @@ bool settings_iterator (const setting_detail_t *setting, setting_output_ptr call
 
         for(axis_idx = 0; axis_idx < N_AXIS; axis_idx++) {
 
-            if(grbl.on_set_axis_setting_unit)
-                set_axis_unit(setting, grbl.on_set_axis_setting_unit(setting->id, axis_idx));
+            if(setting->is_available == NULL || setting->is_available(setting, axis_idx)) {
 
-            if(!(ok = callback(setting, axis_idx, data)))
-                break;
+                if(grbl.on_set_axis_setting_unit)
+                    set_axis_unit(setting, grbl.on_set_axis_setting_unit(setting->id, axis_idx));
+
+                if(!(ok = callback(setting, axis_idx, data)))
+                    break;
+            }
         }
     } else if(setting->flags.increment) {
         setting_details_t *set;
@@ -3316,7 +3363,7 @@ void settings_init (void)
     if(!settings.flags.settings_downgrade && settings.version.build != (GRBL_BUILD - 20000000UL)) {
 
         if(settings.version.build <= 250102) {
-            settings.spindle.on_delay = settings.safety_door.spindle_on_delay * 1000.0f;
+//            settings.spindle.on_delay = settings.safety_door.spindle_on_delay * 1000.0f;
             settings.coolant.on_delay = settings.safety_door.coolant_on_delay * 1000.0f;
             if((changed.spindle = settings.spindle.at_speed_tolerance != settings.pwm_spindle.at_speed_tolerance)) {
                 settings.spindle.at_speed_tolerance = settings.pwm_spindle.at_speed_tolerance;
