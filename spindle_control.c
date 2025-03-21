@@ -581,8 +581,8 @@ bool spindle_set_state (spindle_ptrs_t *spindle, spindle_state_t state, float rp
     if (!ABORTED) { // Block during abort.
 
         if (!state.on) { // Halt or set spindle direction and rpm.
-            rpm = 0.0f;
-            spindle->set_state(spindle, (spindle_state_t){0}, 0.0f);
+            //rpm = 0.0f;
+            spindle->set_state(spindle, (spindle_state_t){0}, spindle_set_rpm(spindle, rpm, spindle->param->override_pct));
         } else {
             // NOTE: Assumes all calls to this function is when grblHAL is not moving or must remain off.
             // TODO: alarm/interlock if going from CW to CCW directly in non-laser mode?
