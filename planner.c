@@ -556,6 +556,19 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
     float time_to_max_accel = block->max_acceleration / block->jerk;    // unit: min - time it takes to reach max acceleration 
     float speed_after_jerkramp = 0.5f * block->jerk * time_to_max_accel * time_to_max_accel;   // unit: mm / min - velocity after one completed jerk ramp up - Vt = V0 + A0T + 1/2 jerk*T
     if(0.5f * block->programmed_rate > speed_after_jerkramp)
+
+        // Limit programmed rate to max speed possible in given block distance (could be problematic with non-zero entry speed, will address later . . .)
+        // Total distance travelled for jerk ramp to given speed v is in 4 equal time segments, length t:
+        // - (1) increasing acceleration starting from zero, distance travelled is [ d = 1/6 * j * t^3 ]
+        // - (2) decreasing acceleration back to zero, distance travelled is [ d = - 1/6 * j * t^3 + v * t ] [where v = final speed]
+        // - (3) increasing deceleration starting from zero, distance travelled is same as (2)
+        // - (4) decreasing deceleration back to zero, distance travelled is same as (1)
+        // first term in (2) cancels with (1), so total distance is [ 2 * (v * t) ]
+        // t is time_to_halfwayvelocity from below which is [ t = sqrt(v / j) ]
+        // sub in and rearrange gives [ d^2 = 4 * v^3 / j ] or [ v^3 = 0.25 * d^2 * j ] or [ v = cbrt(0.25 * d^2 * j) ]
+        float max_speed_in_dist = cbrt(0.25 * block->millimeters * block->millimeters * block->jerk block->programmed_rate);
+        block->programmed_rate = min(max_speed_in_dist_cb, block->programmed_rate);
+
         // Profile time = 2x (1 complete jerk ramp + additional time at max_accel to reach desired speed)
         block->acceleration = block->programmed_rate / (2.0f *(time_to_max_accel + (0.5f * block->programmed_rate - speed_after_jerkramp) / block->max_acceleration));     
     else 
