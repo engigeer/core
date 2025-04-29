@@ -1,5 +1,116 @@
 ## grblHAL changelog
 
+<a name="20250425">20250425
+
+Core:
+
+* Updated `$N0` and `$N1` startup commands to allow multi-block \(line\) gcode commands by using `|` \(vertical bar\) as the separator.
+
+* No longer configures auxiliary output pins claimed for basic functions in order to avoid affecting any previously set alternate pin function.
+
+Drivers:
+
+* iMXRT1062: fix for issue [#95](https://github.com/grblHAL/iMXRT1062/issues/95), spindle PWM output missing.
+
+---
+
+<a name="20250424">20250424
+
+Core:
+
+* Moved part of the driver based spindle sync code to the core.
+Spindle sync now has to be enabled in [grbl/config.h}(https://github.com/grblHAL/core/blob/b41018543b35b0f14f9ab29d9ccc43bd0e4045dc/config.h#L526-L534).
+
+Drivers:
+
+* iMXRT1062, MSP432P401R, STM32F4xx, STM32F7xx: removed spindle sync code now in the core.
+
+* RP2040: Added tentative support for spindle sync, board maps has to be updated for spindle encoder inputs - not all can be due to pin restrictions.  
+Fixed regression causing the PicoCNC board to lose spindle PWM output.
+
+* LPC176x, ESP32, TM4C123, STM32F1xx: replaced deprecated code.
+
+Plugins:
+
+* Some: replaced deprecated code.
+
+---
+
+<a name="20250419">20250419
+
+Core:
+
+* Fixed regression introduced with [PR#673](https://github.com/grblHAL/core/pull/673), added G30 as optional position for tool change and moved new tool change mode from PR#673 to `$346` - _Tool change options_.
+
+* Moved Modbus RTU code from spindle plugin to the core.
+
+* For developers: deprecated `protocol_enqueue_foreground_task()`, replaced by `task_run_on_startup()` - added alias for the deprecated version.  
+Changed signature of `modbus_isup()` to return capabilities flag instead of boolean.
+
+* Fixed bug in delayed task handler, might occasionally hang the controller. May be part of keypad issue [#17](https://github.com/grblHAL/Plugin_keypad/issues/17).
+
+Plugins:
+
+Keypad and spindle: updated for core changes.
+
+Keypad, I2C display interface: fixed alignment issue that caused hardfault on WCO changes on some platforms. May resolve issue [#17](https://github.com/grblHAL/Plugin_keypad/issues/17).
+
+---
+
+<a name="20250415">20250415
+
+Core:
+
+* Fixed long standing "bug" where settings `$370` and `$372` for auxiliary ports where applied before the underlying GPIO pins were initialized by the driver.  
+Improved handling of same settings for external \(I2C, ModBus, ...\) ports.
+
+Drivers:
+
+* iMXRT1062: removed reference to deleted odometer include. Ref. odometer issue [#2](https://github.com/grblHAL/Plugin_odometer/issues/2).
+
+Plugins:
+
+* Misc: updated PCA9654E driver.
+
+---
+
+<a name="20250413">20250413
+
+Core:
+
+* For developers: added wrappers/veneers for `hal.port` functions, plugin code should be changed to use these instead of calling via `hal.port` functions or accessing `hal.port` properties.  
+Improved the [ioports API](https://svn.io-engineering.com/grblHAL/html/ioports_8c.html), updated core code to make use of it. Flagged some calls and (part of) some stuctures as deprecated.
+
+Drivers:
+
+* Most: updated to make use of the new ioports API functionality.
+
+* Some: removed references to deleted odometer include. Ref. odometer issue [#2](https://github.com/grblHAL/Plugin_odometer/issues/2).
+
+Plugins:
+
+* Fans: fixed bug preventing selection of ports to use. Possibly related to issue [#242 comment](https://github.com/grblHAL/core/issues/242#issuecomment-2798816316). 
+
+* Many: updated to make use of the new ioports API functionality.
+
+---
+
+<a name="20250411">20250411
+
+Core:
+
+* Added MCP4725 I2C DAC to IO expander plugins.
+
+Drivers:
+
+* iMXRT1062, STM32F4xx, STM32F7xx, MSP432: fixed regression causing spindle encoder data to be reset shortly before starting spindle synced motion - resulting in error 41.
+
+Plugins:
+
+* Misc: added MCP4725 I2C DAC.
+
+---
+
 <a name="20250409">Build 20250409
 
 Core:

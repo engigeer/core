@@ -523,6 +523,16 @@ Number of tools in tool table, edit to enable (max. 32 allowed)
 #endif
 #endif
 
+/*! \def SPINDLE_SYNC_ENABLE
+\brief
+Set to \ref On or 1 to enable experimental support for spindle synced motion, G33 and G76.
+
+_NOTE:_ require driver and board support for spindle encoder input.
+*/
+#if !defined SPINDLE_SYNC_ENABLE || defined __DOXYGEN__
+#define SPINDLE_SYNC_ENABLE Off
+#endif
+
 /*! \def NGC_EXPRESSIONS_ENABLE
 \brief
 Set to \ref On or 1 to enable experimental support for expressions.
@@ -530,7 +540,7 @@ Set to \ref On or 1 to enable experimental support for expressions.
 Some LinuxCNC extensions are supported, conditionals and subroutines are not.
 */
 #if !defined NGC_EXPRESSIONS_ENABLE || defined __DOXYGEN__
-#define NGC_EXPRESSIONS_ENABLE On
+#define NGC_EXPRESSIONS_ENABLE Off
 #endif
 
 /*! \def NGC_PARAMETERS_ENABLE
@@ -1351,7 +1361,7 @@ and less range over the total 255 PWM levels to signal different spindle speeds.
 // Tool change settings (Group_Toolchange)
 
 /*! @name $341 - Setting_ToolChangeMode
-0 = Normal mode, 1 = Manual change, 2 = Manual change @ G59.3,  3 = Manual change and probe sensor @ G59.3 - sets TLO
+0 = Normal mode, 1 = Manual change, 2 = Manual change @ G59.3,  3 = Manual change and probe tolsetter @ G59.3, 4 = Ignore M6
 */
 ///@{
 #if !defined DEFAULT_TOOLCHANGE_MODE || defined __DOXYGEN__
@@ -1392,11 +1402,17 @@ and less range over the total 255 PWM levels to signal different spindle speeds.
 #endif
 ///@}
 
-/*! @name $346 - Setting_ToolChangeRestorePosition
+/*! @name $346 - Setting_ToolChangeOptions
 */
 ///@{
 #if !defined DEFAULT_TOOLCHANGE_NO_RESTORE_POSITION || defined __DOXYGEN__
 #define DEFAULT_TOOLCHANGE_NO_RESTORE_POSITION Off
+#endif
+#if !defined DEFAULT_TOOLCHANGE_AT_G30 || defined __DOXYGEN__
+#define DEFAULT_TOOLCHANGE_AT_G30 Off
+#endif
+#if !defined DEFAULT_TOOLCHANGE_FAST_PROBE_PULLOFF || defined __DOXYGEN__
+#define DEFAULT_TOOLCHANGE_FAST_PROBE_PULLOFF Off
 #endif
 ///@}
 
