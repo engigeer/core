@@ -907,6 +907,7 @@ void st_prep_buffer (void)
             if (sys.step_control.execute_hold) { // [Forced Deceleration to Zero Velocity]
                 // Compute velocity profile parameters for a feed hold in-progress. This profile overrides
                 // the planner block profile, enforcing a deceleration to zero speed.
+                last_segment_accel = 0;
                 prep.ramp_type = Ramp_Decel;
                 // Compute decelerate distance relative to end of block.
                 float decel_dist = pl_block->millimeters - inv_2_accel * pl_block->entry_speed_sqr;
