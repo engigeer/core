@@ -127,4 +127,7 @@ status_code_t report_time (void);
 // Prints current PID log.
 void report_pid_log (void);
 
+// Axis unit conversion function
+char *(*get_axis_value)(float value);
+
 #endif

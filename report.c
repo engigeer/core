@@ -47,7 +47,7 @@
 
 static char buf[(STRLEN_COORDVALUE + 1) * N_AXIS];
 static char *(*get_axis_values)(float *axis_values);
-static char *(*get_axis_value)(float value);
+//static char *(*get_axis_value)(float value);
 static char *(*get_rate_value)(float value);
 static uint8_t override_counter = 0; // Tracks when to add override data to status reports.
 static uint8_t wco_counter = 0;      // Tracks when to add work coordinate offset data to status reports.
