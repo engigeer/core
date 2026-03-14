@@ -84,6 +84,7 @@ static int8_t stream_instance = -1;
 static uint32_t rx_timeout = 0, silence_until = 0, silence_timeout;
 static int16_t exception_code = 0;
 static modbus_silence_timeout_t silence;
+static uint32_t latency = 0;
 static queue_entry_t queue[MODBUS_QUEUE_LENGTH];
 static rtu_settings_t modbus;
 static volatile bool spin_lock = false, is_up = false;
@@ -222,6 +223,8 @@ static void modbus_poll (void *data)
 
                 char *buf = (char *)((queue_entry_t *)packet)->msg.adu;
                 uint16_t rx_len = packet->msg.rx_length; // store original length for CRC check
+
+                latency = max(latency, modbus.rx_timeout - rx_timeout);
 
                 do {
                     *buf++ = stream.read();
@@ -555,13 +558,13 @@ static status_code_t report_stats (sys_state_t state, char *args)
 {
     char buf[110];
 
-    snprintf(buf, sizeof(buf) - 1, "TX: " UINT32FMT ", retries: " UINT32FMT ", timeouts: " UINT32FMT ", RX exceptions: " UINT32FMT ", CRC errors: " UINT32FMT,
-              stats.tx_count, stats.retries, stats.timeouts, stats.rx_exceptions, stats.crc_errors);
+    snprintf(buf, sizeof(buf) - 1, "TX: " UINT32FMT ", retries: " UINT32FMT ", timeouts: " UINT32FMT ", RX exceptions: " UINT32FMT ", CRC errors: " UINT32FMT ", latency: " UINT32FMT,
+              stats.tx_count, stats.retries, stats.timeouts, stats.rx_exceptions, stats.crc_errors, latency);
 
     report_message(buf, Message_Info);
 
     if(args && (*args == 'r' || *args == 'R'))
-        stats.tx_count = stats.retries = stats.timeouts = stats.rx_exceptions = stats.crc_errors = 0;
+        stats.tx_count = stats.retries = stats.timeouts = stats.rx_exceptions = stats.crc_errors = latency = 0;
 
     return Status_OK;
 }
