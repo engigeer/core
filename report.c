@@ -2941,7 +2941,7 @@ ISR_CODE void report_add_realtime (report_tracking_t report)
         case Report_CycleStart:
             if(!settings.status_report.pin_state)
                 return;
-            return;
+            break;
 
         default:
             break;
