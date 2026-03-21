@@ -1,5 +1,278 @@
 ## grblHAL changelog
 
+<a name="20260321">Build 20260321
+
+Core:
+
+* Small changes to ensure that output during startup do not cause hangs due to no client connection when native USB is default.
+
+---
+
+<a name="20260320">Build 20260320
+
+Core:
+
+* Minor bug fix, only relevant when debug output to a dedicated UART is enabled.
+
+Drivers:
+
+* ESP32: fix for incorrect UART buffer flush, TX buffer was emptied when only RX buffer was called for.
+
+* iMXRT1062: added tentative support for THCAD2 ADC to some boards.
+> [!NOTE]
+> Only pin 14 can be used and any low pass filter on that input must be removed since THCAD2 outputs a frequency in the range 100KHz - 1MHz depending on the input voltage.
+
+---
+
+<a name="20260318">Build 20260318
+
+Core:
+
+* Fix for regression.
+
+* Added MCU clock speed, when available, to DRIVER element in `$I` output. Ref. issue [#923](https://github.com/grblHAL/core/issues/923).
+
+* Improved diagnostics provided by `$MODBUSSTATS` when communication has been lost.
+
+Plugins:
+
+* Networking: moved shared string function to core.
+
+* SD card: added file systems mount directory, size and remaining space to `$I` output. Ref. core issue [#923](https://github.com/grblHAL/core/issues/923).
+
+---
+
+<a name="20260314">Build 20260314
+
+Core:
+
+* Added latency \(in ms\) to `$MODBUSSTATS` output.
+
+Plugins:
+
+* Spindle, all VFDs: "hardened" code against potential hardfault.
+
+* SD card: allow tasks to run during long file listings.
+
+---
+
+<a name="20260312">Build 20260312
+
+Core:
+
+* Added platform specific formatting strings for `int32_t`, "hardened" task handler code.
+
+---
+
+<a name="20260311">Build 20260311
+
+Core:
+
+* Improved handling of current working directory \(CWD\).
+
+Drivers:
+
+* STM32F4xx: added support for additional aux input ports. Changed IRQ priority for motor fault inputs.
+
+Plugins:
+
+* SD card: added `$PWD` command for outputting current working directory and `$CWD=<directory>` as an alternative to `$F=<directory>` to set current working directory.  
+`<directory>` can be `..` for up one level, `/` for the root directory, a single directory name or a path to a directory - either relative to CWD or absolute.
+
+* Spindle: delayed actions on soft reset till after reset is cleared.
+
+* Networking, ftp: improved handling of current working directory. Note that this is not the same as maintained by the core.
+
+---
+
+<a name="20260308">Build 20260308
+
+Core:
+
+* Changes to allow I/O expander pins for motor fault inputs. Ref. PR [#920](https://github.com/grblHAL/core/pull/920).
+
+Drivers:
+
+* ESP32: fix for compiler error when analog inputs were enabled.
+
+* RP2040, STM32F4xx and STM32F7xx: updated for core change.
+
+* STM32F1xx: removed some superfluous code, added reentry lock for MPG mode switch.
+
+---
+
+<a name="20260303">Build 20260303
+
+Core:
+
+* Second step in refactoring encoder HAL/API.
+
+* Added some reentry locks.
+
+Drivers:
+
+* iMXRT1062, STM32F4xx, STM32F7xx: updated for the new encoder HAL/API.
+
+Plugins:
+
+* Encoder: updated to use the new encoder HAL/API.
+
+* Motors: fix for `M122` crashing ESP32 controllers. Ref discussion comment [#645](https://github.com/grblHAL/core/discussions/645#discussioncomment-15961675).
+
+* Networking, Wiznet: "hardened" code in an attempt to prevent rare hang.
+
+---
+
+<a name="20260227">Build 20260227
+
+Core:
+
+* Improved handling of `G43` some more - can now be used in the same block as `M6` when the internal workflow for tool change is enabled or `M6` is ignored.
+
+Plugins:
+
+* Encoder: updated to use the new encoder HAL/API.
+
+---
+
+<a name="20260225">Build 20260225
+
+Core:
+
+* Fixed incorrect behaviour when a tool change using the built-in workflow is aborted, the selected tool was set as the current tool.
+
+* Clarification: `G66` macros calls are not run on their first invocation and will only be run on subsequent blocks containing axis words for `G0` or `G1` motion.
+Subsequent blocks may contain either the `G0` or `G1` command word, if not their modal state will be used. The macro will be called after the motion has been sent to the planner.
+
+* Added support for `G66.1` macro call. Unlike `G66` this is run on the first invocation and for each subsequent block containing parameter word\(s\) used in the first invocation.
+Parameter values changed in subsequent blocks are "sticky", that is they will keep their value for subsequent blocks until changed again.
+
+> [!NOTE]
+> `G66` and `G66.1` behaviour may change in later builds since I have not found any definite specification, it seems that there are different implementations between controllers.  
+> grbHAL aims to adopt the Fanuc behaviour, but this has not been verified.
+
+* Changed behaviour of `G50` and `G51` \(and the `G48` and `G49` shortcuts\) controlling feed rate and spindle RPM overrides.  
+When used with `P0` to turn off the feed rate and/or the spindle RPM will be reverted to their programmed values.
+The override values can still be changed and any changed value will be output in the real time report.
+When turned back on the current override value\(s\) will be reapplied.
+
+* Added support for `G10L0`, reload file based tool table. Can only be used when no tool (tool 0) is in the spindle.
+
+* Fixed buggy handling of `G43` - apply tool offset from tool table.
+
+* Refactored the encoder HAL/API to make it more flexible and as a first step to support rigid tapping.  
+For programmers: encoders are now registered with the core allowing them to be added from both drivers and plugins.
+Plugins can now claim encoders, and code has been added to the core to make it easy for drivers and plugins to bind a slow encoder to interrupt capable auxiliary inputs.
+> [!NOTE]
+> The new HAL/API will be extended as needed later.
+
+Drivers:
+
+* iMXRT1062, STM32F4xx, STM32F7xx: updated for the new encoder HAL/API.
+
+* RP2040: fixed typos affecting limit switch inversion for A+ axes.
+
+Plugins:
+
+* Encoder: updated to use the new encoder HAL/API.
+
+* Misc, Tool table: added support for `G10L0`, reload tool table.
+
+---
+
+<a name="20260218">Build 20260218
+
+Core:
+
+* Changed `$pinstate` command output, now reports pin number instead of pin id.
+
+* For developers: added API call that returns Modbus stream handlers.
+
+Drivers:
+
+* iMXRT1062: fixed copy paste error.
+
+* RP4040: removed limit on highest expander pin number that can be used for basic functions.
+
+* STM32F1xx: removed duplicate pin definition for safety door input in CNC3040 map.
+
+Plugins:
+
+* Templates, Modbus command: added commands `$MODBUSDBG` and `$MODBUSDBG=0` that can be used to enable/disable `[MSG:...]` reports containing sent and received data. 
+
+---
+
+<a name="20260215">Build 20260215
+
+Core:
+
+* Marked a large number of non-critical functions with `FLASHMEM` to save RAM for the iMXRT1062 driver.
+
+* Improved alarm handling, if a critical alarm is active when a non-critical alarm is raised the non-critical alarm will be delayed until after reset for the critical alarm.
+
+* Improved Modbus exception handling and added high level API call for creating and sending Modbus messages.
+Added `G65P7` inbuilt macro, using the new API call, for interacting with Modbus devices from gcode. See the [Wiki](https://github.com/grblHAL/core/wiki/Expressions-and-flow-control#inbuilt-g65-macros) for details.
+
+Drivers:
+
+* iMXRT1062: marked some non-critical functions with `FLASHMEM`.
+
+Plugins:
+
+* SD card: marked some non-critical functions with `FLASHMEM` to save RAM for the iMXRT1062 driver.
+
+* Templates, Modbus command: new plugin that adds the system command `$MODBUSCMD` that can be used to interact with Modbus devices. 
+
+---
+
+<a name="20260212">Build 20260212
+
+Core:
+
+* For developers: added new callback for Modbus timeouts, defaults to exception callback for backwards compatibilty.
+
+Driver:
+
+* RP2040: fixed minor init sequence error.
+
+Plugins:
+
+* Spindle, VFDs: improved exception/timeout handling by adding new online status.
+E.g. when offline VFDs will not be polled for status and causing unneccesary alarms.
+
+* Misc, FNC Expander: fix for typo affecting `$pins` report.
+
+* Misc, ESP AT: late update for core signature changes.
+
+---
+
+<a name="20260210">20260210
+
+Drivers:
+
+* RP2040: added hotwire variant for SKR Pico v1 board, uses bed heater output for spindle PWM. Removed some unused code.
+
+* Networking, WizNet: added lock to avoid intermittent network stack crash that may happen when large reports are output.
+
+---
+
+<a name="20260206">Build 20260206
+
+Core:
+
+* Changed spindle at speed check to potentially fix issue with it sometimes skipping the wait cycle. Ref. discussion [#198](https://github.com/grblHAL/core/discussions/198).
+
+* Added experimental support for ramping PWM output on RPM changes, enable with new `$9` option flag and spindle delay settings:  
+`$394` > 0, enables ramp up for spindle on and on RPM changes while spindle is enabled.  
+`$339` > 0, enables ramp down for spindle off.  
+`$392` > 0, enables ramp up on door close and/or restore from parked.  
+
+Plugins:
+
+* Spindle: updated to ensure `$340` setting is applied when changed instead of requiring a reboot.
+
+---
+
 <a name="20260205">Build 20260205
 
 Core:
