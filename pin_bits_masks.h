@@ -125,6 +125,7 @@
 #endif
 #define add_aux_input_scan(fn, irq, signal_bit) { .function = fn, .irq_mode = irq, .signal.value = signal_bit, .port = IOPORT_UNASSIGNED, .gpio.pin = 0xFF, .scan = On },
 #define add_aux_motor_input(fn, motor, aux, irq) { .function = fn##motor, .irq_mode = irq, .port = IOPORT_UNASSIGNED, .gpio.port = (void *)motor##_##aux##_PORT, .gpio.pin = motor##_##aux##_PIN },
+#define add_aux_input_exp(fn, aux, irq, signal_bit) { .function = fn, .irq_mode = irq, .signal.value = signal_bit, .port = IOPORT_UNASSIGNED, .gpio.port = (void *)aux##_PORT, .gpio.pin = aux##_PIN },
 #define add_aux_input_no_signal(fn, irq) { .function = fn, .irq_mode = irq, .port = IOPORT_UNASSIGNED, .gpio.pin = 0xFE },
 #define add_aux_output_exp(fn, aux) { .function = fn, .port = IOPORT_UNASSIGNED, .gpio.port = (void *)aux##_PORT, .gpio.pin = aux##_PIN },
 
@@ -203,23 +204,35 @@ static aux_ctrl_t aux_ctrl[] = {
     add_aux_input(Input_QEI_Select, QEI_SELECT, IRQ_Mode_RisingFalling, 0)
 #endif
 // Probe pins can be bound explicitly and can be "degraded" to not interrupt capable.
-#if PROBE_ENABLE && defined(PROBE_PIN)
-    add_aux_input(Input_Probe, PROBE, IRQ_Mode_Change, 0)
+#if PROBE_ENABLE
+    #if !defined(PROBE_PIN)
+        //add_aux_input_no_signal(Input_Probe, IRQ_Mode_RisingFalling)
+    #elif defined(PROBE_PORT) && (PROBE_PORT == GPIO_PORT)
+        add_aux_input(Input_Probe, PROBE, IRQ_Mode_Change, 0)
+    #elif defined(PROBE_PORT) && (PROBE_PORT == EXPANDER_PORT)
+        add_aux_input_exp(Input_Probe, PROBE, IRQ_Mode_Change, 0)
+    #endif
 #endif
-#if PROBE2_ENABLE && defined(PROBE2_PIN)
-    add_aux_input(Input_Probe2, PROBE2, IRQ_Mode_RisingFalling, 0)
+#if PROBE2_ENABLE
+    #if !defined(PROBE2_PIN)
+        add_aux_input_no_signal(Input_Probe, IRQ_Mode_RisingFalling)
+    #elif defined(PROBE2_PORT) && (PROBE2_PORT == GPIO_PORT)
+        add_aux_input(Input_Probe2, PROBE2, IRQ_Mode_Change, 0)
+    #elif defined(PROBE2_PORT) && (PROBE2_PORT == EXPANDER_PORT)
+        add_aux_input_exp(Input_Probe2, PROBE2, IRQ_Mode_Change, 0)
+    #endif
 #endif
-#if TOOLSETTER_ENABLE && defined(TOOLSETTER_PIN)
-    add_aux_input(Input_Toolsetter, TOOLSETTER, IRQ_Mode_RisingFalling, 0)
+#if TOOLSETTER_ENABLE
+    #if !defined(TOOLSETTER_PIN)
+        add_aux_input_no_signal(Input_Toolsetter, IRQ_Mode_RisingFalling)
+    #elif defined(TOOLSETTER_PORT) && (TOOLSETTER_PORT == GPIO_PORT)
+        add_aux_input(Input_Toolsetter, TOOLSETTER, IRQ_Mode_Change, 0)
+    #elif defined(TOOLSETTER_PORT) && (TOOLSETTER_PORT == EXPANDER_PORT)
+        add_aux_input_exp(Input_Toolsetter, TOOLSETTER, IRQ_Mode_Change, 0)
+    #endif
 #endif
 
 // The following pins are allocated from remaining aux inputs pool
-#if TOOLSETTER_ENABLE && !defined(TOOLSETTER_PIN)
-    add_aux_input_no_signal(Input_Toolsetter, IRQ_Mode_RisingFalling)
-#endif
-#if PROBE2_ENABLE && !defined(PROBE2_PIN)
-    add_aux_input_no_signal(Input_Probe2, IRQ_Mode_RisingFalling)
-#endif
 #if TLS_OVERTRAVEL_ENABLE
     add_aux_input_scan(Input_ToolsetterOvertravel, IRQ_Mode_Change, SIGNALS_TLS_OVERTRAVEL_BIT)
 #endif
