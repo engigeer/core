@@ -3875,6 +3875,11 @@ status_code_t gc_execute_block (char *block)
             protocol_buffer_synchronize();
             spindle_set_state(sspindle->hal, sspindle->state, gc_parser_flags.laser_disable ? 0.0f : gc_block.values.s);
         }
+        else if(!sspindle->state.on) { // UPDATE LASER POWER STATE IN BACKGROUND WHEN LASER IS OFF
+            sspindle->hal->param->rpm = gc_block.values.s;
+            protocol_buffer_synchronize();
+            spindle_set_state(sspindle->hal, sspindle->state, gc_block.values.s);            
+        }
         sspindle->rpm = gc_block.values.s; // Update spindle speed state.
     }
 

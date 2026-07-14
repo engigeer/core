@@ -721,7 +721,7 @@ FLASHMEM static bool _spindle_set_state (spindle_ptrs_t *spindle, spindle_state_
 {
     if(!ABORTED) { // Block during abort.
 
-        if(!state.on) { // Halt or set spindle direction and rpm.
+        if(!state.on && !spindle->cap.laser) { // Halt or set spindle direction and rpm.
             rpm = 0.0f;
             if(spindle->param->option.ramp_down)
                 spindle_ramp(spindle, spindle->param->state, spindle->param->rpm_overridden, 0.0f, settings.spindle.off_delay);
