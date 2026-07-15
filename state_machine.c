@@ -692,6 +692,7 @@ FLASHMEM static void state_await_resume (uint_fast16_t rt_exec)
                     }
 
                     sys.override.spindle_stop.value = 0; // Clear spindle stop override states
+                    sys.step_control.update_spindle_rpm = On; // Force update spindle rpm to restore value
 
                     grbl.report.feedback_message(Message_None);
                 }
