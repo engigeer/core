@@ -383,7 +383,8 @@ FLASHMEM void state_suspend_manager (void)
             if(spindle->hal && spindle->hal->get_state(spindle->hal).on) {
                 if(grbl.on_spindle_programmed)
                     grbl.on_spindle_programmed(spindle->hal, (spindle_state_t){0}, 0.0f, SpindleSpeedMode_RPM);
-                spindle_set_state(spindle->hal, (spindle_state_t){0}, 0.0f); // De-energize
+                //spindle_set_state(spindle->hal, (spindle_state_t){0}, 0.0f); // De-energize                
+                state_spindle_restore(spindle, settings.spindle.on_delay); // RPM to zero but leave energized
                 sys.override.spindle_stop.enabled = On; // Set stop override state to enabled, if de-energized.
                 if(grbl.on_override_changed)
                     grbl.on_override_changed(OverrideChanged_SpindleState);
@@ -692,7 +693,7 @@ FLASHMEM static void state_await_resume (uint_fast16_t rt_exec)
                     }
 
                     sys.override.spindle_stop.value = 0; // Clear spindle stop override states
-
+                    
                     grbl.report.feedback_message(Message_None);
                 }
                 break;
