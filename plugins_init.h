@@ -273,6 +273,11 @@
     virtual_inputs_init();
 #endif
 
+#if HOMING_ACCEL_ENABLE
+    extern void homing_accel_init (void);
+    homing_accel_init();
+#endif;
+
 // End third party plugin definitions.
 
 #if ODOMETER_ENABLE
