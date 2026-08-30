@@ -283,6 +283,11 @@
     mpg_init();
 #endif
 
+#if POLAR_INTERP_ENABLE
+    extern void polar_interp_init (void);
+    polar_interp_init();
+#endif
+
 // End third party plugin definitions.
 
 #if ODOMETER_ENABLE
