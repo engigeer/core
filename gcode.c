@@ -5004,7 +5004,7 @@ status_code_t gc_execute_block (char *block)
             gc_state.modal.cutter_comp.side = CComp_Off;
             cc_enable(&gc_state.modal.cutter_comp, plane, (coord_data_t *)gc_state.position);
 #endif
-            if(gc_state.modal.g5x_offset.id != CoordinateSystem_G54) {
+            if(gc_state.modal.g5x_offset.id != CoordinateSystem_G54 && !settings.flags.keep_offsets_on_reset) {
                 gc_state.modal.g5x_offset.id = CoordinateSystem_G54;
                 report_add_realtime(Report_GWCO);
             }

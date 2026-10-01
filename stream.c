@@ -137,7 +137,7 @@ bool stream_tx_blocking (void)
 {
     static volatile bool lock = false;
 
-    if(!lock && !modbus_isbusy()) {
+    if(!lock) {// && !modbus_isbusy()) {
         lock = true;
         grbl.on_execute_realtime(state_get());
         lock = false;
