@@ -2529,7 +2529,7 @@ PROGMEM static const setting_detail_t setting_detail[] = {
 #if N_AXIS > 3
      { Setting_RotaryOptions, Group_General, "Rotary options", NULL, Format_XBitfield, "Fix feedrate,Revert metric conversion", NULL, NULL, Setting_IsExpandedFn, set_rotary_options, get_int, NULL },
 #endif
-     { Setting_MPGAutoReportInterval, Group_MPG, "MPG autoreport interval", "ms", Format_Int16, "###0", "100", "1000", Setting_IsExtendedFn, set_mpg_report_interval, get_int, NULL, { .reboot_required = On, .allow_null = On } },
+     { Setting_MPGAutoReportInterval, Group_MPG, "MPG autoreport interval", "ms", Format_Int16, "###0", "25", "1000", Setting_IsExtendedFn, set_mpg_report_interval, get_int, NULL, { .reboot_required = On, .allow_null = On } },
      { Settings_MPG_BaudRate, Group_MPG, "MPG baud rate", NULL, Format_RadioButtons, "38400,115200,230400,460800,576000,921600", NULL, NULL, Setting_NonCoreFn, mpg_set_baud, get_int, is_setting_available },
 };
 
