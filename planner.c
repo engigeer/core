@@ -491,28 +491,29 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
     // has the feedrate assigned to the linear axes. To accomplish this we'll change the planner block to
     // behave as if its doing a G93 inverse time mode move.
 
-    if(settings.flags.rotary_fix_enable &&
-        !block->condition.inverse_time &&
+    if(!block->condition.inverse_time &&
          !block->condition.rapid_motion &&
           (motion.mask & settings.steppers.is_rotary.mask)) {
 
         if(motion.mask & ~settings.steppers.is_rotary.mask) {
 
-            float linear_magnitude = 0.0f;
+            if(settings.flags.rotary_fix_enable) {
+                float linear_magnitude = 0.0f;
 
-            idx = 0;
-            motion.mask &= ~settings.steppers.is_rotary.mask;
+                idx = 0;
+                motion.mask &= ~settings.steppers.is_rotary.mask;
 
-            while(motion.mask) {
-                if(motion.mask & 0x01)
-                    linear_magnitude += unit_vec[idx] * unit_vec[idx];
-                motion.mask >>= 1;
-                idx++;
+                while(motion.mask) {
+                    if(motion.mask & 0x01)
+                        linear_magnitude += unit_vec[idx] * unit_vec[idx];
+                    motion.mask >>= 1;
+                    idx++;
+                }
+
+                pl_data->feed_rate = 1.0f / (sqrtf(linear_magnitude) / pl_data->feed_rate);
+
+                block->condition.inverse_time = On;
             }
-
-            pl_data->feed_rate = 1.0f / (sqrtf(linear_magnitude) / pl_data->feed_rate);
-
-            block->condition.inverse_time = On;
 
         } else if(gc_state.modal.units_imperial && settings.flags.revert_metric_conversion)
             pl_data->feed_rate *= INCH_PER_MM;// Revert in/min to mm/min conversion for angular motion
