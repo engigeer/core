@@ -700,7 +700,7 @@ FLASHMEM static xbar_t *io_get_pin_info (io_port_type_t type, io_port_direction_
             if((pin = io_port->hal.get_pin_info(dir, port - io_port->ports_id->cfg[dir].n_start))) {
                 pin->ports_id = io_port->ports_id;
                 pin->cap.claimable = is_aux(cfg, pin->function);
-                pin->mode.claimed = cfg->claimed.mask & (1UL << (pin->id + io_port->ports_id->cfg[dir].n_start));
+                pin->mode.claimed = !!(cfg->claimed.mask & (1UL << (pin->id + io_port->ports_id->cfg[dir].n_start)));
             }
         }
     } while(pin == NULL && (io_port = io_port->next));
@@ -928,7 +928,7 @@ FLASHMEM static uint8_t add_ports (io_ports_detail_t *ports, uint8_t *map, io_po
 #endif
         if(p_data->ports == NULL)
             p_data->ports = ports;
-        p_data->count = -1;
+        p_data->count = p_data->free = -1;
     } else {
         ports->n_start = 255;
         ports->idx_last = 0;
@@ -991,7 +991,7 @@ FLASHMEM static bool _ioports_add (io_ports_data_t *ports, io_port_type_t type, 
                 idx_in++;
 
                 if(i < MAX_PORTS) {
-                    cfg_in->bus.mask |= (1 << i);
+                    cfg_in->bus.mask |= (1UL << i);
                     strcat(cfg_in->port_names, i == 0 ? "Aux " : ",Aux ");
                     strcat(cfg_in->port_names, uitoa(i));
                 }
@@ -1004,7 +1004,7 @@ FLASHMEM static bool _ioports_add (io_ports_data_t *ports, io_port_type_t type, 
                     set_description(type, Port_Output, i - ports->out.n_start, pnum_to_string(idx_out, cfg_out->pnum));
 
                 if(i < MAX_PORTS) {
-                    cfg_out->bus.mask |= (1 << i);
+                    cfg_out->bus.mask |= (1UL << i);
                     strcat(cfg_out->port_names, i == 0 ? "Aux " : ",Aux ");
                     strcat(cfg_out->port_names, uitoa(i));
                 }
@@ -1072,19 +1072,22 @@ FLASHMEM bool ioports_add_analog (io_analog_t *analog)
 
         io_ports_list_t *ports;
 
-        if((ports = insert_ports())) {
+        if((ok = (ports = insert_ports()))) {
 
             ports->type = Port_Analog;
             ports->hal.set_pin_description = analog->set_pin_description;
             ports->hal.get_pin_info = analog->get_pin_info;
+
             if(analog->ports->out.n_ports) {
                 ports->hal.analog_out = analog->analog_out;
                 analog->ports->out.pin_base = get_pin_base(Port_Analog, Port_Output);
             }
+
             if(analog->ports->in.n_ports) {
                 ports->hal.wait_on_input = analog->wait_on_input;
                 analog->ports->out.pin_base = get_pin_base(Port_Analog, Port_Input);
             }
+
             ports->ports_id = analog->ports;
         }
     }
@@ -1105,24 +1108,26 @@ FLASHMEM bool ioports_add_digital (io_digital_t *digital)
 
         io_ports_list_t *io_ports;
 
-        if((io_ports = insert_ports())) {
+        if((ok = (io_ports = insert_ports()))) {
 
             io_ports->type = Port_Digital;
             io_ports->hal.set_pin_description = digital->set_pin_description;
             io_ports->hal.get_pin_info = digital->get_pin_info;
+
             if(digital->ports->out.n_ports) {
                 io_ports->hal.digital_out = digital->digital_out;
                 digital->ports->out.pin_base = get_pin_base(Port_Digital, Port_Output);
             }
+
             if(digital->ports->in.n_ports) {
                 io_ports->hal.wait_on_input = digital->wait_on_input;
                 io_ports->hal.register_interrupt_handler = digital->register_interrupt_handler;
                 digital->ports->in.pin_base = get_pin_base(Port_Digital, Port_Input);
             }
-            io_ports->ports_id = digital->ports;
-        }
 
-        ioports_add_settings(NULL, NULL);
+            io_ports->ports_id = digital->ports;
+            ioports_add_settings(NULL, NULL);
+        }
     }
 
     return ok;
@@ -1146,6 +1151,9 @@ __STATIC_FORCEINLINE uint_fast16_t invert_pwm (ioports_pwm_t *pwm_data, uint_fas
 */
 FLASHMEM bool ioports_precompute_pwm_values (pwm_config_t *config, ioports_pwm_t *pwm_data, uint32_t clock_hz)
 {
+    if(config->freq_hz > (float)(clock_hz / 100) || (uint32_t)((float)clock_hz / config->freq_hz) > UINT16_MAX)
+        return false;
+
     pwm_data->f_clock = clock_hz;
 
     if(config->max > config->min) {
@@ -1591,7 +1599,7 @@ FLASHMEM static void ioports_configure (settings_t *settings)
             if(is_aux(cfg, xbar->function)) {
                 in_config.inverted = !!(settings->ioport.invert_in.mask & (1 << port));
 #ifdef AUX_SETTINGS_PULLUP
-                in_config.pull_mode = (settings->ioport.pullup_disable_in.mask & (1 << port)) ? PullMode_None : PullMode_Up;
+                in_config.pull_mode = (settings->ioport.pullup_disable_in.mask & (1 << port)) ? PullMode_Down : PullMode_Up;
 #else
                 in_config.pull_mode = (pull_mode_t)xbar->mode.pull_mode;
 #endif
@@ -1602,9 +1610,9 @@ FLASHMEM static void ioports_configure (settings_t *settings)
                     if((ctrl = xbar_fn_to_signals_mask(xbar->function)).mask) {
                         in_config.inverted = !!(settings->control_invert.mask & ctrl.mask);
                         in_config.pull_mode = (settings->control_disable_pullup.mask & ctrl.mask) ? PullMode_None : PullMode_Up;
-                    } else if(xbar->function == Input_MPGSelect)
-                        in_config.pull_mode = PullMode_Up;
-                }
+                    }
+                } else if(xbar->function == Input_MPGSelect)
+                    in_config.pull_mode = PullMode_Up;
             }
             xbar->config(xbar, &in_config, false);
         }

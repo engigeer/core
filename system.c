@@ -113,8 +113,8 @@ ISR_CODE void ISR_FUNC(control_interrupt_handler)(control_signals_t signals)
             if(state_get() != STATE_ESTOP)
                 mc_reset();
         } else {
-#ifndef NO_SAFETY_DOOR_SUPPORT
-            if(signals.safety_door_ajar && hal.signals_cap.safety_door_ajar && !gc_state.tool_change) {
+
+            if(signals.safety_door_ajar && hal.signals_cap.safety_door_ajar && !gc_state.flags.tool_change) {
                 sys.flags.is_parking = false;
                 if(settings.safety_door.flags.ignore_when_idle) {
                     // Only stop the spindle (laser off) when idle or jogging,
@@ -127,7 +127,7 @@ ISR_CODE void ISR_FUNC(control_interrupt_handler)(control_signals_t signals)
                 } else
                     system_set_exec_state_flag(EXEC_SAFETY_DOOR);
             }
-#endif
+
             if(signals.probe_overtravel || signals.tls_overtravel) {
                 event_signals.probe_overtravel = On;
                 event_signals.tls_overtravel = signals.tls_overtravel;
@@ -171,7 +171,7 @@ ISR_CODE void ISR_FUNC(control_interrupt_handler)(control_signals_t signals)
                 if(event_signals.cycle_start) {
                     system_set_exec_state_flag(EXEC_CYCLE_START);
                     report_add_realtime(Report_CycleStart);
-                    gc_state.tool_change = false;
+                    gc_state.flags.tool_change = false;
                     if(grbl.on_cycle_start)
                         grbl.on_cycle_start();
                 }
@@ -610,16 +610,12 @@ FLASHMEM static status_code_t output_ngc_parameters (sys_state_t state, char *ar
     status_code_t retval = Status_OK;
 
     if(args) {
-#if NGC_PARAMETERS_ENABLE
         int32_t id;
         retval = read_int(args, &id);
         if(retval == Status_OK && id >= 0)
             retval = report_ngc_parameter((ngc_param_id_t)id);
         else
             retval = report_named_ngc_parameter(args);
-#else
-        retval = Status_InvalidStatement;
-#endif
     } else
         report_ngc_parameters();
 
@@ -830,7 +826,8 @@ FLASHMEM static status_code_t rtc_action (sys_state_t state, char *args)
                 retval = Status_BadNumberFormat;
             else if(!hal.rtc.set_datetime(time))
                 retval = Status_InvalidStatement;
-        }
+        } else
+            retval = Status_InvalidStatement;
     }
 
     return retval;
@@ -969,9 +966,7 @@ PROGMEM static const sys_command_t sys_commands[] = {
     { "J", jog, {}, { .str = "$J=<gcode> - jog machine" } },
     { "#", output_ngc_parameters, { .allow_blocking = On, .allow_redirect = On }, {
         .str = "output offsets, tool table, probing and home position"
-#if NGC_PARAMETERS_ENABLE
      ASCII_EOL "$#=<n> - output value for parameter <n>"
-#endif
     } },
     { "$", output_settings, { .allow_blocking = On }, {
         .str = "$<n> - output setting <n> value"

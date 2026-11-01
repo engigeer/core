@@ -103,6 +103,8 @@ static struct {
     on_gcode_mode_changed_ptr on_gcode_mode_changed;
 } mpg;
 
+extern void gc_filestream_changed (vfs_file_t *file);
+
 FLASHMEM void stream_register_streams (io_stream_details_t *details)
 {
     if(details->n_streams) {
@@ -570,8 +572,7 @@ FLASHMEM bool stream_close (io_stream_t const *stream)
 
 FLASHMEM void stream_set_file (vfs_file_t *file, stream_read_ptr read)
 {
-    if(!(hal.stream.file = file))
-        gc_state.file_stream = false;
+    gc_filestream_changed((hal.stream.file = file));
 
     if(read)
         hal.stream.read = read;
@@ -799,7 +800,7 @@ FLASHMEM bool stream_is_busy (bool is_connected)
             is_connected = hal.stream.is_connected();
     }
 
-    return is_connected || gc_state.file_run || !(state == STATE_IDLE || (state & (STATE_ALARM|STATE_ESTOP)));
+    return is_connected || gc_state.flags.file_run || !(state == STATE_IDLE || (state & (STATE_ALARM|STATE_ESTOP)));
 }
 
 FLASHMEM bool stream_mpg_set_baud (uint8_t baud)
@@ -812,7 +813,7 @@ FLASHMEM bool stream_mpg_set_baud (uint8_t baud)
 FLASHMEM bool stream_mpg_enable (bool on)
 {
     static io_stream_t org_stream = {
-        .type = StreamType_Null
+        .type = StreamType_Undefined
     };
 
     if(mpg.stream.read == NULL)
@@ -825,7 +826,7 @@ FLASHMEM bool stream_mpg_enable (bool on)
     }
 
     if(on) {
-        if(org_stream.type == StreamType_Null) {
+        if(org_stream.type == StreamType_Undefined) {
             memcpy(&org_stream, &hal.stream, sizeof(io_stream_t));
             if(hal.stream.disable_rx)
                 hal.stream.disable_rx(true);
@@ -843,9 +844,9 @@ FLASHMEM bool stream_mpg_enable (bool on)
             hal.stream.cancel_read_buffer = mpg.stream.cancel_read_buffer;
             hal.stream.reset_read_buffer = mpg.stream.reset_read_buffer;
         }
-    } else if(org_stream.type != StreamType_Null) {
+    } else if(org_stream.type != StreamType_Undefined) {
         memcpy(&hal.stream, &org_stream, offsetof(io_stream_t, report));
-        org_stream.type = StreamType_Null;
+        org_stream.type = StreamType_Undefined;
         mpg.stream.report.override_counter = mpg.stream.report.wco_counter = 0;
         if(hal.stream.disable_rx)
             hal.stream.disable_rx(false);

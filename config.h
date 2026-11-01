@@ -32,6 +32,13 @@ specific needs, i.e. performance tuning or adjusting to non-typical machines.
 #ifndef _GRBL_CONFIG_H_
 #define _GRBL_CONFIG_H_
 
+#ifndef Off
+#define Off 0
+#endif
+#ifndef On
+#define On 1
+#endif
+
 // Compile time only default configuration
 
 /*! \def N_AXIS
@@ -567,14 +574,6 @@ Some LinuxCNC extensions are supported, conditionals and subroutines are not.
 */
 #if !defined NGC_EXPRESSIONS_ENABLE || defined __DOXYGEN__
 #define NGC_EXPRESSIONS_ENABLE Off
-#endif
-
-/*! \def NGC_PARAMETERS_ENABLE
-\brief
-Set to \ref On or 1 to enable experimental support for parameters.
-*/
-#if !defined NGC_PARAMETERS_ENABLE || defined __DOXYGEN__
-#define NGC_PARAMETERS_ENABLE On
 #endif
 
 /*! \def NGC_N_ASSIGN_PARAMETERS_PER_BLOCK
@@ -2491,10 +2490,10 @@ __NOTE:__ Must be a positive values.
 #define N_SYS_SPINDLE 8
 #endif
 
-#if NGC_EXPRESSIONS_ENABLE && !NGC_PARAMETERS_ENABLE
+#ifdef NGC_PARAMETERS_ENABLE
 #undef NGC_PARAMETERS_ENABLE
-#define NGC_PARAMETERS_ENABLE On
 #endif
+#define NGC_PARAMETERS_ENABLE On
 
 #if (REPORT_WCO_REFRESH_BUSY_COUNT < REPORT_WCO_REFRESH_IDLE_COUNT)
   #error "WCO busy refresh is less than idle refresh."

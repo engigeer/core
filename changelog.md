@@ -1,5 +1,48 @@
 ## grblHAL changelog
 
+<a name="202601101">Build 20261101
+
+Core:
+
+* `$60` - _Restore overrides_ has been changed to _End program actions_ and a new option added for restoring the default `G54` coordinate system on program end (`M2` and `M30`) - default on.
+Ref. issue [#1021](https://github.com/grblHAL/core/issues/1021).
+
+* `%` demarcation of subprograms/macros is no longer allowed and will raise an error.
+
+* A number of mainly edge case issues has been found by the SI-agent(s) and fixed.
+
+Drivers:
+
+* All: updated to allow board maps to specify, via a define, that pullup settings are not needed for control, limits and/or probe inputs when there is no direct connection to the MCU pins.
+
+* STM32F4xx: added option to use the 4Kb battery backed SRAM for settings.
+
+* STM32 family: fix for incorrect clock prescaler used for some configurations.
+
+* LPC176x: fix for compilation failure with generic board enabled. Ref. discussion [#61](https://github.com/grblHAL/LPC176x/discussions/61).  
+Added MKS SGEN L board map. Ref. issue [#62](https://github.com/grblHAL/LPC176x/issues/62).
+
+Plugins:
+
+* Keypad: added explicit claim option for all possible macro pins, always allocate NVS for I2C keypad. Ref. issue [#23](https://github.com/grblHAL/Plugin_keypad/issues/23).
+
+* Networking: fix for telnet service not starting for WiFi.
+
+* Misc: updated for core change.
+
+* Laser: updated for core change.
+
+* Plasma: fix for hardfault when virtual ports are enabled, ref issue [#32](https://github.com/grblHAL/Plugin_plasma/issues/32). Enhanced material file handling, among changes is the ability to edit/add entries via "magic" comments.  
+The latest edge version of ioSender has gotten a new tab for material handling for those who are interested.
+
+* Spindle, cloned: fix for incorrect registration and handling of "at speed" state. Ref. issue [#47](https://github.com/grblHAL/Plugins_spindle/issues/47).
+
+* SD card: updated for core changes and "hardened". E.g. for controllers that has card detect support a running job will now be cleanly terminated if the card is removed.
+
+* WebUI: removed custom support for ESP32 embedded files, now uses shared embedded files.
+
+---
+
 <a name="202601015">Build 20261015
 
 Core:

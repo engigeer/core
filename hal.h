@@ -43,40 +43,57 @@
 
 #define HAL_VERSION 10
 
+typedef union {
+    uint8_t value;
+    struct {
+        uint8_t limits  :1, //!< Pullup resistors for limit inputs are are supported.
+                control :1, //!< Pullup resistors for control inputs are supported.
+                probe   :1, //!< Pullup resistors for probe inputs are supported.
+                unused  :5;
+    };
+} pullup_enable_t;
+
 // Bitmap flags for driver capabilities, to be set by driver in driver_init() or plugins,
 // flags may be cleared by plugins or the core to switch off capabilities.
 typedef union {
     uint32_t value; //!< All bitmap flags.
-    struct {
-        uint32_t software_debounce           :1, //!< Software debounce of input switches signals is supported.
-                 step_pulse_delay            :1, //!< Stepper step pulse delay is supported.
-                 limits_pull_up              :1, //!< Pullup resistors for limit inputs are are supported.
-                 control_pull_up             :1, //!< Pullup resistors for control inputs are supported.
-                 probe_pull_up               :1, //!< Pullup resistors for probe inputs are supported.
-                 spindle_encoder             :1, //!< Spindle encoder is supported.
-                 spindle_encoder_index_event :1, //!< Spindle encoder is supported.
-                 spindle_sync                :1, //!< Spindle synced motion is supported.
-                 sd_card                     :1,
-                 littlefs                    :1,
-                 bluetooth                   :1,
-                 ethernet                    :1,
-                 wifi                        :1,
-                 spindle_pid                 :1,
-                 mpg_mode                    :1,
-                 laser_ppi_mode              :1, //!< Laser PPI (Pulses Per Inch) mode is supported.
-                 atc                         :1, //!< Automatic tool changer (ATC) is supported.
-                 no_gcode_message_handling   :1,
-                 odometers                   :1,
-                 pwm_spindle                 :1,
-                 probe_latch                 :1, //!< Deprecated.
-                 probe                       :1, //!< Primary (default) probe input is supported.
-                 probe2                      :1, //!< 2nd or 3rd probe input is supported.
-                 toolsetter                  :1, //!< Toolsetter (2nd probe) input is supported.
-                 rtc                         :1,
-                 rtc_set                     :1,
-                 bltouch_probe               :1,
-                 modbus_rtu                  :1, // Modbus RTU stream is enabled.
-                 unassigned                  :5;
+    union {
+        struct {
+            uint32_t software_debounce           :1, //!< Software debounce of input switches signals is supported.
+                     step_pulse_delay            :1, //!< Stepper step pulse delay is supported.
+                     limits_pull_up              :1, //!< Pullup resistors for limit inputs are are supported.
+                     control_pull_up             :1, //!< Pullup resistors for control inputs are supported.
+                     probe_pull_up               :1, //!< Pullup resistors for probe inputs are supported.
+                     spindle_encoder             :1, //!< Spindle encoder is supported.
+                     spindle_encoder_index_event :1, //!< Spindle encoder is supported.
+                     spindle_sync                :1, //!< Spindle synced motion is supported.
+                     sd_card                     :1,
+                     littlefs                    :1,
+                     bluetooth                   :1,
+                     ethernet                    :1,
+                     wifi                        :1,
+                     spindle_pid                 :1,
+                     mpg_mode                    :1,
+                     laser_ppi_mode              :1, //!< Laser PPI (Pulses Per Inch) mode is supported.
+                     atc                         :1, //!< Automatic tool changer (ATC) is supported.
+                     no_gcode_message_handling   :1,
+                     odometers                   :1,
+                     pwm_spindle                 :1,
+                     probe_latch                 :1, //!< Deprecated.
+                     probe                       :1, //!< Primary (default) probe input is supported.
+                     probe2                      :1, //!< 2nd or 3rd probe input is supported.
+                     toolsetter                  :1, //!< Toolsetter (2nd probe) input is supported.
+                     rtc                         :1,
+                     rtc_set                     :1,
+                     bltouch_probe               :1,
+                     modbus_rtu                  :1, // Modbus RTU stream is enabled.
+                     unassigned                  :5;
+        };
+        struct {
+            uint32_t pad0           :2,
+                     pullup_enabled :3, //!< pullup_enable_t inject.
+                     pad1           :27;
+        };
     };
 } driver_cap_t;
 

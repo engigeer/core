@@ -662,7 +662,7 @@ FLASHMEM static status_code_t set_axis_mask (setting_id_t id, uint_fast16_t valu
             break;
 
         case Setting_HomingDirMask:
-            settings.homing.dir_mask.value = value;
+            settings.homing.dir_mask.value = value & system_axis_mask();
             break;
 
         case Setting_SteppersEnergize:
@@ -1149,8 +1149,6 @@ static status_code_t set_mode (setting_id_t id, uint_fast16_t int_value)
 
 #endif // LATHE_UVW_OPTION
 
-#ifndef NO_SAFETY_DOOR_SUPPORT
-
 static status_code_t set_parking_enable (setting_id_t id, uint_fast16_t int_value)
 {
     settings.parking.flags.value = bit_istrue(int_value, bit(0)) ? (int_value & 0x07) : 0;
@@ -1163,14 +1161,13 @@ static status_code_t set_parking_enable (setting_id_t id, uint_fast16_t int_valu
     return Status_OK;
 }
 
-static status_code_t set_restore_overrides (setting_id_t id, uint_fast16_t int_value)
+static status_code_t set_m2_m30_action (setting_id_t id, uint_fast16_t int_value)
 {
-    settings.flags.restore_overrides = int_value != 0;
+    settings.flags.restore_overrides = int_value & 0b01;
+    settings.flags.no_restore_coord_sys = !(int_value & 0b10);
 
     return Status_OK;
 }
-
-#endif // NO_SAFETY_DOOR_SUPPORT
 
 static status_code_t set_homing_pulloff (setting_id_t id, float value)
 {
@@ -1716,10 +1713,6 @@ FLASHMEM static uint32_t get_int (setting_id_t id)
                            (settings.pwm_spindle.flags.ignore_delays ? 0b10000 : 0));
             break;
 
-        case Setting_HomingDirMask:
-            value = settings.homing.dir_mask.mask & system_axis_mask();
-            break;
-
         case Setting_Mode:
             value = settings.mode;
             break;
@@ -1790,10 +1783,6 @@ FLASHMEM static uint32_t get_int (setting_id_t id)
 #endif
             break;
 
-        case Setting_SteppersEnergize:
-            value = settings.steppers.energize.mask;
-            break;
-
         case Setting_EnableLegacyRTCommands:
             value = settings.flags.legacy_rt_commands;
             break;
@@ -1802,8 +1791,9 @@ FLASHMEM static uint32_t get_int (setting_id_t id)
             value = settings.parking.flags.value;
             break;
 
-        case Setting_RestoreOverrides:
-            value = settings.flags.restore_overrides;
+        case Setting_EndProgramActions:
+            value = settings.flags.restore_overrides |
+                     (settings.flags.no_restore_coord_sys ? 0b00 : 0b10);
             break;
 
         case Setting_SleepEnable:
@@ -2090,9 +2080,12 @@ FLASHMEM static bool is_setting_available (const setting_detail_t *setting, uint
             break;
 
         case Setting_InvertProbePin:
-        case Setting_ProbePullUpDisable:
         case Setting_ProbingFlags:
             available = hal.probe.get_state != NULL;
+            break;
+
+        case Setting_ProbePullUpDisable:
+            available = hal.driver_cap.probe_pull_up && hal.probe.get_state != NULL;
             break;
 
         case Setting_SpindlePWMBehaviour:
@@ -2104,8 +2097,15 @@ FLASHMEM static bool is_setting_available (const setting_detail_t *setting, uint
             break;
 
         case Setting_ControlInvertMask:
-        case Setting_ControlPullUpDisableMask:
             available = hal.signals_cap.bits & ~(control_signals_t){ .probe_triggered = On }.bits;
+            break;
+
+        case Setting_ControlPullUpDisableMask:
+            available = hal.driver_cap.control_pull_up && (hal.signals_cap.bits & ~(control_signals_t){ .probe_triggered = On }.bits);
+            break;
+
+        case Setting_LimitPullUpDisableMask:
+            available = hal.driver_cap.limits_pull_up;
             break;
 
         case Setting_SpindleInvertMask:
@@ -2178,8 +2178,6 @@ FLASHMEM static bool is_setting_available (const setting_detail_t *setting, uint
             available = settings.homing.flags.per_axis_feedrates;
             break;
 
-#ifndef NO_SAFETY_DOOR_SUPPORT
-
         case Setting_DoorOptions:
             available = hal.signals_cap.safety_door_ajar || !settings.parking.flags.enabled;
             break;
@@ -2191,7 +2189,6 @@ FLASHMEM static bool is_setting_available (const setting_detail_t *setting, uint
         case Setting_DoorCoolantOnDelay:
             available = hal.coolant_cap.mask != 0;
             break;
-#endif
 
         case Setting_SpindleAtSpeedTolerance:
             available = spindle_get_caps(true).at_speed || hal.driver_cap.spindle_encoder;
@@ -2385,7 +2382,7 @@ PROGMEM static const setting_detail_t setting_detail[] = {
      { Setting_CoolantInvertMask, Group_Coolant, "Invert coolant outputs", NULL, Format_Bitfield, coolant_signals, NULL, NULL, Setting_IsExtended, &settings.coolant.invert.mask, NULL, NULL },
      { Setting_SpindleInvertMask, Group_Spindle, "Invert spindle signals", NULL, Format_Bitfield, spindle_signals, NULL, NULL, Setting_IsExtendedFn, set_spindle_invert, get_int, is_setting_available, { .reboot_required = On } },
      { Setting_ControlPullUpDisableMask, Group_ControlSignals, "Pullup disable control inputs", NULL, Format_Bitfield, control_signals, NULL, NULL, Setting_IsExtendedFn, set_control_disable_pullup, get_int, is_setting_available },
-     { Setting_LimitPullUpDisableMask, Group_Limits, "Pullup disable limit inputs", NULL, Format_AxisMask, NULL, NULL, NULL, Setting_IsExtendedFn, set_axis_mask, get_axis_mask, NULL },
+     { Setting_LimitPullUpDisableMask, Group_Limits, "Pullup disable limit inputs", NULL, Format_AxisMask, NULL, NULL, NULL, Setting_IsExtendedFn, set_axis_mask, get_axis_mask, is_setting_available },
      { Setting_ProbePullUpDisable, Group_Probing, "Pullup disable probe inputs", NULL, Format_Bitfield, probe_signals, NULL, NULL, Setting_IsLegacyFn, set_probe_disable_pullup, get_int, is_setting_available },
      { Setting_SoftLimitsEnable, Group_Limits, "Soft limits enable", NULL, Format_Bool, NULL, NULL, NULL, Setting_IsLegacyFn, set_soft_limits_enable, get_int, NULL },
 #if COMPATIBILITY_LEVEL <= 1
@@ -2441,10 +2438,8 @@ PROGMEM static const setting_detail_t setting_detail[] = {
      { Setting_ParkingPulloutRate, Group_SafetyDoor, "Parking pull-out rate", "mm/min", Format_Decimal, "###0.0", NULL, NULL, Setting_IsExtended, &settings.parking.pullout_rate, NULL, NULL },
      { Setting_ParkingTarget, Group_SafetyDoor, "Parking target", "mm", Format_Decimal, "-###0.0", "-100000", NULL, Setting_IsExtended, &settings.parking.target, NULL, NULL },
      { Setting_ParkingFastRate, Group_SafetyDoor, "Parking fast rate", "mm/min", Format_Decimal, "###0.0", NULL, NULL, Setting_IsExtended, &settings.parking.rate, NULL, NULL },
-     { Setting_RestoreOverrides, Group_General, "Restore overrides", NULL, Format_Bool, NULL, NULL, NULL, Setting_IsExtendedFn, set_restore_overrides, get_int, NULL },
-#ifndef NO_SAFETY_DOOR_SUPPORT
+     { Setting_EndProgramActions, Group_General, "End program actions", NULL, Format_Bitfield, "Restore overrides,Restore G54", NULL, NULL, Setting_IsExtendedFn, set_m2_m30_action, get_int, NULL },
      { Setting_DoorOptions, Group_SafetyDoor, "Safety door options", NULL, Format_Bitfield, door_options, NULL, NULL, Setting_IsExtended, &settings.safety_door.flags.value, NULL, is_setting_available },
-#endif
      { Setting_SleepEnable, Group_General, "Sleep enable", NULL, Format_Bool, NULL, NULL, NULL, Setting_IsExtendedFn, set_sleep_enable, get_int, is_setting_available },
      { Setting_HoldActions, Group_General, "Feed hold actions", NULL, Format_Bitfield, "Disable laser during hold,Restore spindle and coolant state on resume,Set RPM to minimum (except for laser M4)", NULL, NULL, Setting_IsExtendedFn, set_hold_actions, get_int, NULL },
      { Setting_ForceInitAlarm, Group_General, "Force init alarm", NULL, Format_Bool, NULL, NULL, NULL, Setting_IsExtendedFn, set_force_initialization_alarm, get_int, NULL },
@@ -2529,7 +2524,7 @@ PROGMEM static const setting_detail_t setting_detail[] = {
 #if N_AXIS > 3
      { Setting_RotaryOptions, Group_General, "Rotary options", NULL, Format_XBitfield, "Fix feedrate,Revert metric conversion", NULL, NULL, Setting_IsExpandedFn, set_rotary_options, get_int, NULL },
 #endif
-     { Setting_MPGAutoReportInterval, Group_MPG, "MPG autoreport interval", "ms", Format_Int16, "###0", "100", "1000", Setting_IsExtendedFn, set_mpg_report_interval, get_int, NULL, { .reboot_required = On, .allow_null = On } },
+     { Setting_MPGAutoReportInterval, Group_MPG, "MPG autoreport interval", "ms", Format_Int16, "###0", "25", "1000", Setting_IsExtendedFn, set_mpg_report_interval, get_int, NULL, { .reboot_required = On, .allow_null = On } },
      { Settings_MPG_BaudRate, Group_MPG, "MPG baud rate", NULL, Format_RadioButtons, "38400,115200,230400,460800,576000,921600", NULL, NULL, Setting_NonCoreFn, mpg_set_baud, get_int, is_setting_available },
 };
 
@@ -2631,11 +2626,9 @@ PROGMEM static const setting_descr_t setting_descr[] = {
     { Setting_ParkingPulloutRate, "Spindle pull-out/plunge slow feed rate in mm/min." },
     { Setting_ParkingTarget, "Parking axis target. In mm, as machine coordinate [-max_travel, 0]." },
     { Setting_ParkingFastRate, "Parking fast rate to target after pull-out in mm/min." },
-    { Setting_RestoreOverrides, "Restore overrides to default values at program end." },
-#ifndef NO_SAFETY_DOOR_SUPPORT
+    { Setting_EndProgramActions, "Controls restore overrides and coordinate system to default values at program end (M2, M30)." },
     { Setting_DoorOptions, "Ignore when idle: disregard door signal in IDLE state to allow jogging etc. Available when controller has door input.\n"
                            "Keep coolant state on open: do not turn off coolant if on." },
-#endif
     { Setting_SleepEnable, "Enable sleep mode." },
     { Setting_HoldActions, "Actions taken during feed hold and on resume from feed hold." },
     { Setting_ForceInitAlarm, "Start in alarm mode after a cold reset." },
@@ -2703,10 +2696,8 @@ PROGMEM static const setting_descr_t setting_descr[] = {
 #if N_AXIS > 3
      { Settings_RotaryAxes, "Designates axes as rotary, interpretation some other relevant axis settings is changed accordingly." },
 #endif
-#ifndef NO_SAFETY_DOOR_SUPPORT
     { Setting_DoorSpindleOnDelay, "Delay to allow spindle to spin up after safety door is closed or on resume from park." },
     { Setting_DoorCoolantOnDelay, "Delay to allow coolant to restart after safety door is closed or on resume from park." },
-#endif
     { Setting_SpindleOnDelay, "Delay to allow spindle to spin up. 0 or 0.5 - 20s\\n"
                               "If spindle supports \"at speed\" functionality it is the time to wait before alarm 14 is raised."
     },
@@ -3248,8 +3239,7 @@ FLASHMEM const setting_detail_t *setting_get_details (setting_id_t id, setting_d
 
 FLASHMEM const char *setting_get_description (setting_id_t id)
 {
-    static char *buf = NULL;
-    static size_t buflen = 0;
+    static string_t buf = {0};
 
     const char *description = NULL, *s;
 
@@ -3271,17 +3261,14 @@ FLASHMEM const char *setting_get_description (setting_id_t id)
                         if((description = settings->descriptions[idx].description) && setting->flags.increment && (s = strchr(description, '?'))) {
 
                             const char *v = uitoa((id - setting->id) / (setting->flags.subgroups ? setting->flags.increment : 1) + 1);
-                            size_t len = strlen(description) + strlen(v) + 1;
 
-                            if(len < buflen || (buf = realloc(buf, (buflen = len)))) {
-                                *buf = '\0';
+                            if(strset(&buf, strlen(description) + strlen(v) + 1, NULL)) {
                                 if(description != s)
-                                    strlcpy(buf, description, s - description + 1);
-                                strcat(buf, v);
-                                strcat(buf, s + 1);
-                                description = buf;
-                            } else
-                                buflen = 0;
+                                    strlcpy(buf.data, description, s - description + 1);
+                                strcat(buf.data, v);
+                                strcat(buf.data, s + 1);
+                                description = buf.data;
+                            }
                         }
                     }
                 } while(idx && description == NULL);
@@ -3874,9 +3861,8 @@ FLASHMEM void settings_init (void)
     uint32_t mask = 0b001 | (hal.driver_cap.toolsetter << 1) | (hal.driver_cap.probe2 << 2);
     setting_remove_elements(Setting_InvertProbePin, mask, true);
     setting_remove_elements(Setting_ProbePullUpDisable, mask, true);
-#ifndef NO_SAFETY_DOOR_SUPPORT
     setting_remove_elements(Setting_DoorOptions, ((!settings.parking.flags.enabled || hal.signals_cap.safety_door_ajar) << 1) | hal.signals_cap.safety_door_ajar, true);
-#endif
+
 #if N_AXIS > 3
     for(idx = 3; idx < system_n_axis(); idx++)
         *(rotary_axes + (idx - 3) * 7) = *axis_letter[idx];

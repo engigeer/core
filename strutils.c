@@ -380,3 +380,38 @@ FLASHMEM char *btoa (uint64_t bytes)
 
     return buf;
 }
+
+// string_t argument must be statically allocated or nulled before first call!
+FLASHMEM char *strset (string_t *string, size_t len, const char *s)
+{
+    if(!string->data && string->base) {
+        string->data = string->base->data;
+        string->len = string->base->len;
+    }
+
+    if(len > string->len) {
+        char *tmp;
+        if((tmp = realloc(string->base && string->data == string->base->data ? NULL : string->data, len + 1))) {
+            string->len = len;
+            string->data = tmp;
+        } else if(string->data) {
+            if(!string->base || string->data != string->base->data)
+                free(string->data); // TODO: try allocating again since a larger fragment may be available after free()?
+
+            string->data = string->base ? string->base->data : NULL;
+            string->len = string->base ? string->base->len : 0;
+        }
+    }
+
+    if(len > string->len)
+        s = NULL;
+    else {
+        if(s)
+            strcpy(string->data, s);
+        else
+            *string->data = '\0';
+        s = string->data;
+    }
+
+    return (char *)s;
+}

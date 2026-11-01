@@ -88,8 +88,9 @@ typedef enum {
     NVS_None = 0,   //!< 0
     NVS_EEPROM,     //!< 1
     NVS_FRAM,       //!< 2
-    NVS_Flash,      //!< 3
-    NVS_Emulated    //!< 4 - used by the core for buffered read and write
+    NVS_BBRAM,      //!< 3 - Battery backed RAM
+    NVS_Flash,      //!< 4
+    NVS_Emulated    //!< 5 - used by the core for buffered read and write
 } nvs_type;
 
 //! Structure for keeping track of NVS area used by driver and/or plugin code.

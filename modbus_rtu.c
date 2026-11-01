@@ -129,6 +129,7 @@ static void tx_message (volatile queue_entry_t *msg)
 
     packet = msg;
     state = ModBus_TX;
+    exception_code = ModBus_NoException;
     rx_timeout = modbus.rx_timeout;
 
     stream.flush_rx_buffer();
@@ -174,7 +175,7 @@ static void modbus_poll (void *data)
 
         case ModBus_AwaitReply:
             if(rx_timeout && --rx_timeout == 0) {
-
+                int32_t code;
                 stats.timeouts++;
 
                 if(packet->async) {
@@ -182,8 +183,9 @@ static void modbus_poll (void *data)
                     if(packet->callbacks.on_rx_timeout)
                         packet->callbacks.on_rx_timeout(0, packet->msg.context);
                     packet = NULL;
-                } else if(stream.read() == packet->msg.adu[0] && (stream.read() & 0x80)) {
-                    int32_t code = stream.read();
+                } else if(stream.read() == packet->msg.adu[0] && ((code = stream.read()) & 0x80)) {
+                    if(code != SERIAL_NO_DATA)
+                        code = stream.read();
                     exception_code = code == SERIAL_NO_DATA ? ModBus_UnknownException : (modbus_exception_t)(code & 0xFF);
                     state = ModBus_Exception;
                     stats.rx_exceptions++;
@@ -216,7 +218,7 @@ static void modbus_poll (void *data)
                         stats.crc_errors++;
                         if((state = packet->async ? ModBus_Silent : ModBus_Exception) == ModBus_Silent) {
                             if(packet->callbacks.on_rx_exception)
-                                packet->callbacks.on_rx_exception(ModBus_CRCError, packet->msg.context);
+                                packet->callbacks.on_rx_exception((exception_code = ModBus_CRCError), packet->msg.context);
                             packet = NULL;
                         }
                         silence_until = hal.get_elapsed_ticks() + silence_timeout;
@@ -256,7 +258,7 @@ static bool modbus_send_rtu (modbus_message_t *msg, const modbus_callbacks_t *ca
 
     if(msg->tx_length > MODBUS_MAX_ADU_SIZE || msg->rx_length > MODBUS_MAX_ADU_SIZE) {
         if(callbacks->on_rx_exception)
-            callbacks->on_rx_exception(ModBus_IllegalSize, msg->context);
+            callbacks->on_rx_exception((exception_code = ModBus_IllegalSize), msg->context);
         return false;
     }
 
@@ -330,8 +332,10 @@ static bool modbus_send_rtu (modbus_message_t *msg, const modbus_callbacks_t *ca
         if(head->next != tail) {
             add_message((queue_entry_t *)head, msg, true, callbacks);
             head = head->next;
-        }
-    }
+        } else
+            return false;
+    } else
+        return false;
 
     return !block;
 }

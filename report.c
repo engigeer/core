@@ -486,13 +486,13 @@ FLASHMEM void report_grbl_settings (bool all, void *data)
     uint_fast16_t idx, n_settings = 0;
     const setting_detail_t *setting;
     setting_detail_t **all_settings, **psetting;
-    setting_details_t *details = settings_get_details();
+    setting_details_t *details = settings_get_details(), *core_settings = details;
 
     do {
         n_settings += details->n_settings;
     } while((details = details->next));
 
-    details = settings_get_details();
+    details = core_settings;
 
     if((all_settings = psetting = calloc(n_settings, sizeof(setting_detail_t *)))) {
 
@@ -528,9 +528,14 @@ FLASHMEM void report_grbl_settings (bool all, void *data)
         free(all_settings);
 
     } else do {
-        for(idx = 0; idx < details->n_settings; idx++)
-            settings_iterator(&details->settings[idx], print_setting, data);
-    } while((details = details->next));
+        for(idx = 0; idx < details->n_settings; idx++) {
+            setting = &details->settings[idx];
+            if(!setting->flags.hidden &&
+                (all || (details == core_settings && (setting->type == Setting_IsLegacy || setting->type == Setting_IsLegacyFn))) &&
+                  is_setting_available(setting))
+                settings_iterator(setting, print_setting, data);
+        }
+    } while(all && (details = details->next));
 }
 
 
@@ -571,8 +576,6 @@ FLASHMEM void report_tool_offsets (void)
     hal.stream.write("]" ASCII_EOL);
 }
 
-#if NGC_PARAMETERS_ENABLE
-
 // Prints NIST/LinuxCNC NGC parameter value
 FLASHMEM status_code_t report_ngc_parameter (ngc_param_id_t id)
 {
@@ -606,8 +609,6 @@ FLASHMEM status_code_t report_named_ngc_parameter (char *arg)
 
     return Status_OK;
 }
-
-#endif
 
 // Prints grblHAL NGC parameters (coordinate offsets, probing, tool table)
 FLASHMEM void report_ngc_parameters (void)
@@ -779,10 +780,8 @@ FLASHMEM void report_gcode_modes (stream_write_ptr stream_write)
 
     stream_write(gc_state.modal.units_imperial ? " G20" : " G21");
 
-#if NGC_PARAMETERS_ENABLE
     if(gc_state.g66_args)
         stream_write(" G66");
-#endif
 
     stream_write(gc_state.modal.distance_incremental ? " G91" : " G90");
 
@@ -853,7 +852,7 @@ FLASHMEM void report_gcode_modes (stream_write_ptr stream_write)
 
     stream_write(gc_spindle_get(0)->state.on ? (gc_spindle_get(0)->state.ccw ? " M4" : " M3") : " M5");
 
-    if(gc_state.tool_change)
+    if(gc_state.flags.tool_change)
         stream_write(" M6");
 
     if (gc_state.modal.coolant.value) {
@@ -1129,7 +1128,7 @@ FLASHMEM void report_build_info (char *line, bool extended)
             *buf = '\0';
             if(hal.nvs.type == NVS_Emulated)
                 strcat(buf, "*");
-            strcat(buf, nvs->type == NVS_Flash ? "FLASH" : (nvs->type == NVS_FRAM ? "FRAM" : "EEPROM"));
+            strcat(buf, ((const char * const[]){"EEPROM", "FRAM", "BBRAM", "FLASH"})[nvs->type - 1]);
             if(hal.nvs.size_max) {
                 strcat(buf, " ");
                 strcat(buf, uitoa(hal.nvs.size_max / 1024));
@@ -1261,7 +1260,7 @@ void report_realtime_status (stream_write_ptr stream_write, status_report_tracki
 
     sys_state_t state = state_get();
 
-    switch (gc_state.tool_change && state == STATE_CYCLE ? STATE_TOOL_CHANGE : state) {
+    switch (gc_state.flags.tool_change && state == STATE_CYCLE ? STATE_TOOL_CHANGE : state) {
 
         case STATE_IDLE:
             stream_write("Idle");
@@ -1506,7 +1505,7 @@ void report_realtime_status (stream_write_ptr stream_write, status_report_tracki
     } else
         report->flags.wco = Off;
 
-    if(report->flags.value || gc_state.tool_change) {
+    if(report->flags.value || gc_state.flags.tool_change) {
 
         if(report->flags.wco) {
             if(settings.status_report.machine_position) {
@@ -1532,7 +1531,7 @@ void report_realtime_status (stream_write_ptr stream_write, status_report_tracki
             stream_write(appendbuf(2, ",", uitoa((uint32_t)spindle_0->param->override_pct)));
         }
 
-        if(report->flags.spindle || report->flags.coolant || report->flags.tool || gc_state.tool_change) {
+        if(report->flags.spindle || report->flags.coolant || report->flags.tool || gc_state.flags.tool_change) {
 
             coolant_state_t cl_state = hal.coolant.get_state();
 
@@ -1555,7 +1554,7 @@ void report_realtime_status (stream_write_ptr stream_write, status_report_tracki
             if (cl_state.mist)
                 *append++ = 'M';
 
-            if(gc_state.tool_change && !report->flags.tool)
+            if(gc_state.flags.tool_change && !report->flags.tool)
                 *append++ = 'T';
 
             *append = '\0';
@@ -1627,9 +1626,7 @@ void report_realtime_status (stream_write_ptr stream_write, status_report_tracki
         static gc_modal_t last_state;
         static motion_mode_t motion_mode;
         static bool g92_active;
-#if NGC_PARAMETERS_ENABLE
         static bool g66_active;
-#endif
 
         spindle_t *spindle = gc_spindle_get(0);
         motion_mode_t new_mode = st_get_motion_mode();
@@ -1637,21 +1634,15 @@ void report_realtime_status (stream_write_ptr stream_write, status_report_tracki
         gcode_mode_changed = feed_rate != gc_state.feed_rate ||
                               spindle_rpm != spindle->rpm ||
                                tool_id != gc_state.tool->tool_id ||
-                                motion_mode != new_mode
-#if NGC_PARAMETERS_ENABLE
-                                || g66_active != !!gc_state.g66_args;
-#else
-;
-#endif
+                                motion_mode != new_mode ||
+                                 g66_active != !!gc_state.g66_args;
 
         if(gcode_mode_changed) {
             feed_rate = gc_state.feed_rate;
             tool_id = gc_state.tool->tool_id;
             spindle_rpm = spindle->rpm;
             motion_mode = new_mode;
-#if NGC_PARAMETERS_ENABLE
             g66_active = !!gc_state.g66_args;
-#endif
         } else if((gcode_mode_changed = g92_active != is_g92_active()))
             g92_active = !g92_active;
         else if(memcmp(&last_state, &gc_state.modal, sizeof(gc_modal_t))) {

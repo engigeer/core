@@ -663,8 +663,10 @@ FLASHMEM float spindle_set_override (spindle_ptrs_t *spindle, override_t speed_o
                     spindle->update_pwm(spindle, spindle->get_pwm(spindle, spindle->param->rpm_overridden));
                 else if(spindle->update_rpm)
                     spindle->update_rpm(spindle, spindle->param->rpm_overridden);
-            } else
+            } else {
                 sys.step_control.update_spindle_rpm = On;
+                spindle->param->option.override_pending = state_get() == STATE_HOLD;
+            }
         }
 
         report_add_realtime(Report_Overrides); // Set to report change immediately
@@ -709,7 +711,7 @@ FLASHMEM static void spindle_ramp (spindle_ptrs_t *spindle, spindle_state_t stat
 
     if(delay_ms > DWELL_TIME_STEP && (ramp = _get_ramp(spindle))) {
 
-        task_delete(spindle_ramp_task, NULL);
+        task_delete(spindle_ramp_task, ramp);
 
         if(spindle_get_ramp(spindle, rpm, target_rpm, delay_ms, ramp) > DWELL_TIME_STEP) {
 
@@ -883,12 +885,15 @@ FLASHMEM bool spindle_restore (spindle_ptrs_t *spindle, spindle_state_t state, f
     bool ok;
 
     if(!spindle->param->option.restore_rpm && spindle->cap.laser) { // When in laser mode, ignore spindle spin-up delay. Set to turn on laser when cycle starts.
-        if(!(ok = !settings.flags.disable_laser_during_hold))
+        if(!(ok = !settings.flags.disable_laser_during_hold && state.on && spindle_check_state(spindle, state)))
             ok = (sys.step_control.update_spindle_rpm = _spindle_set_state(spindle, state, 0.0f, 0));
-    } else if(!(ok = !spindle->param->option.restore_rpm && spindle_check_state(spindle, state) && spindle->param->rpm == rpm)) {
+    } else if(!(ok = !(spindle->param->option.restore_rpm || spindle->param->option.override_pending) && spindle_check_state(spindle, state) && spindle->param->rpm == rpm)) {
         ok = spindle_set_state_wait(spindle, state, rpm, delay_ms);
-        spindle->param->option.restore_rpm = Off;
+        if(!spindle->param->option.override_pending)
+            spindle->param->option.restore_rpm = Off;
     }
+
+    spindle->param->option.override_pending = Off;
 
     return ok;
 }
@@ -1417,6 +1422,8 @@ FLASHMEM static void spindle1_settings_load (void)
 {
     if((hal.nvs.memcpy_from_nvs((uint8_t *)&sp1_settings, nvs_address, sizeof(spindle1_pwm_settings_t), true) != NVS_TransferResult_OK))
         spindle1_settings_restore();
+
+    sp1_settings.cfg.at_speed_tolerance = settings.spindle.at_speed_tolerance;
 
 #if N_SPINDLE == 1
     sp1_settings.cfg.flags.ignore_delays = Off;

@@ -119,6 +119,10 @@
 #define M7_LIMIT_ENABLE 0
 #endif
 
+#define PULLUP_LIMITS   0b001
+#define PULLUP_CONTROL  0b010
+#define PULLUP_PROBE    0b100
+
 #ifndef NEOPIXELS_ENABLE
 #define NEOPIXELS_ENABLE    0
 #endif
@@ -180,6 +184,10 @@
 #endif
 #ifndef EEPROM_IS_FRAM
 #define EEPROM_IS_FRAM      0
+#endif
+
+#ifndef BBRAM_ENABLE
+#define BBRAM_ENABLE        0
 #endif
 
 #if EEPROM_ENABLE || KEYPAD_ENABLE == 1 || I2C_STROBE_ENABLE || (DISPLAY_ENABLE & DISPLAY_I2C) || (TRINAMIC_ENABLE && TRINAMIC_I2C)
@@ -525,10 +533,6 @@
 #endif
 #ifndef LIMITS_OVERRIDE_ENABLE
 #define LIMITS_OVERRIDE_ENABLE 0
-#endif
-
-#if SAFETY_DOOR_ENABLE && defined(NO_SAFETY_DOOR_SUPPORT)
-#error "Driver does not support safety door functionality!"
 #endif
 
 //

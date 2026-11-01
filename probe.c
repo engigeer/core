@@ -196,7 +196,6 @@ FLASHMEM bool probe_add (probe_id_t probe_id, uint8_t port, pin_irq_mode_t irq_m
             break;
     }
 
-    hal.driver_cap.probe_pull_up = On;
     hal.probe.configure = probe_configure;
     hal.probe.connected_toggle = probe_connected_toggle;
     hal.probe.get_caps = probe_get_caps;

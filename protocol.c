@@ -43,11 +43,12 @@
 typedef union {
     uint8_t value;
     struct {
-        uint8_t overflow            :1,
-                comment_parentheses :1,
-                comment_semicolon   :1,
-                keep_rt_commands    :1,
-                unassigned          :5;
+        uint8_t overflow             :1,
+                comment_parentheses  :1,
+                comment_semicolon    :1,
+                keep_rt_commands     :1,
+                is_demarcate_command :1,
+                unassigned           :3;
     };
 } line_flags_t;
 
@@ -71,7 +72,7 @@ FLASHMEM bool protocol_enqueue_gcode (char *gcode)
                  !((sys.rt_exec_state & (EXEC_MOTION_CANCEL|EXEC_MOTION_CANCEL_FAST))) &&
                   strlen(gcode) < sizeof(xcommand);
 
-    if(ok && gc_state.file_run)
+    if(ok && gc_state.flags.file_run)
         ok = gc_state.modal.program_flow != ProgramFlow_Running || strncmp((char *)gcode, "$J=", 3);
 
     if(ok)
@@ -175,13 +176,11 @@ bool protocol_main_loop (void)
         grbl.report.feedback_message(Message_AlarmLock);
     } else {
         state_set(STATE_IDLE);
-#ifndef NO_SAFETY_DOOR_SUPPORT
         // Check if the safety door is open.
         if (hal.signals_cap.safety_door_ajar && !settings.safety_door.flags.ignore_when_idle && hal.control.get_state().safety_door_ajar) {
             system_set_exec_state_flag(EXEC_SAFETY_DOOR);
             protocol_execute_realtime(); // Enter safety door mode. Should return as IDLE state.
         }
-#endif
         if(sys.alarm_pending)
             system_raise_alarm(sys.alarm_pending);
         else {
@@ -221,8 +220,11 @@ bool protocol_main_loop (void)
                     system_set_exec_state_flag(EXEC_MOTION_CANCEL);
 
             } else if(c == ASCII_EOF) {
-                if(grbl.on_file_end)
-                    grbl.on_file_end(hal.stream.file, gc_state.last_error);
+                if(grbl.on_file_end) {
+                    status_code_t status;
+                    if((status = grbl.on_file_end(hal.stream.file, gc_state.last_error)) != gc_state.last_error)
+                        grbl.report.status_message((gc_state.last_error = (status == Status_Handled ? Status_OK : status)));
+                }
             } else if(c == ASCII_LF || c == ASCII_CR) { // End of line reached
 
                 // Check for possible secondary end of line character, do not process as empty line
@@ -238,9 +240,12 @@ bool protocol_main_loop (void)
 
                 line.data[line.pos] = '\0'; // Set string termination character.
 
-              #if REPORT_ECHO_LINE_RECEIVED
+#if REPORT_ECHO_LINE_RECEIVED
                 report_echo_line_received(line);
-              #endif
+#endif
+
+                if(*line.data == CMD_PROGRAM_DEMARCATION && line.data[1] == '\0')
+                    line.flags.is_demarcate_command = On;
 
                 // Direct and execute one line of formatted input, and report status of execution.
                 if(line.flags.overflow) // Report line overflow error.
@@ -254,21 +259,14 @@ bool protocol_main_loop (void)
                     }
                 } else if(*line.data == '[' && grbl.on_user_command)
                     gc_state.last_error = grbl.on_user_command(line.data);
-                else if(state_get() & (STATE_ALARM|STATE_ESTOP|STATE_JOG)) { // Everything else is gcode. Block if in alarm, eStop or jog mode.
-                    if(*line.data == CMD_PROGRAM_DEMARCATION && line.data[1] == '\0' && (state_get() & (STATE_ALARM|STATE_ESTOP))) {
-                        gc_state.file_run = !gc_state.file_run;
-                        gc_state.last_error = Status_OK;
-                        if(grbl.on_file_demarcate)
-                            grbl.on_file_demarcate(gc_state.file_run);
-                    } else
-                        gc_state.last_error = Status_SystemGClock;
-                }
+                else if(state_get() & (line.flags.is_demarcate_command ? STATE_JOG : (STATE_ALARM|STATE_ESTOP|STATE_JOG))) // Everything else is gcode. Block if in alarm, eStop or jog mode.
+                    gc_state.last_error = Status_SystemGClock;
+                else
 #if COMPATIBILITY_LEVEL == 0
-                else if(gc_state.last_error == Status_OK || gc_state.last_error == Status_GcodeToolChangePending) { // Parse and execute g-code block.
-#else
-                else { // Parse and execute g-code block.
-
+                if(gc_state.last_error == Status_OK || gc_state.last_error == Status_GcodeToolChangePending) // Block if error is active and not tool change pending.
 #endif
+                // Parse and execute g-code block.
+                {
                     if((gc_state.last_error = gc_execute_block(line.data)) != Status_OK)
                         line.eol = '\0';
                 }
@@ -351,7 +349,8 @@ bool protocol_main_loop (void)
         if(!protocol_execute_realtime() && sys.abort) // Runtime command check point.
             return !sys.flags.exit;                   // Bail to main() program loop to reset system.
 
-        sys.cancel = false;
+		if(sys.cancel)
+        	sys.cancel = false;
 
         // Check for sleep conditions and execute auto-park, if timeout duration elapses.
         if(settings.flags.sleep_enable)
@@ -410,7 +409,7 @@ bool protocol_execute_realtime (void)
             protocol_exec_rt_suspend(state);
 
 #if NVSDATA_BUFFER_ENABLE
-        if((state == STATE_IDLE || (state & (STATE_ALARM|STATE_ESTOP))) && settings_dirty.is_dirty && !gc_state.file_run)
+        if((state == STATE_IDLE || (state & (STATE_ALARM|STATE_ESTOP))) && settings_dirty.is_dirty && !gc_state.flags.file_run)
             nvs_buffer_sync_physical();
 #endif
     }
@@ -563,7 +562,7 @@ bool protocol_exec_rt_system (void)
             if(sys.override.control.sync)
                 sys.override.control = gc_state.modal.override_ctrl;
 
-            gc_state.tool_change = false;
+            gc_state.flags.tool_change = false;
 
             modbus_reset(sys.abort);
 
@@ -907,6 +906,7 @@ ISR_CODE bool ISR_FUNC(protocol_enqueue_realtime_command)(uint8_t c)
 
         case CMD_JOG_CANCEL:
             drop = true;
+            sys.flags.allow_pending_jog = Off;
             clear_line(&line);
             hal.stream.cancel_read_buffer();
 #ifdef KINEMATICS_API // needed when kinematics algorithm segments long jog distances (as it blocks reading from input stream)
@@ -1042,7 +1042,7 @@ ISR_CODE bool ISR_FUNC(protocol_enqueue_realtime_command)(uint8_t c)
         if(signals.cycle_start) {
             system_set_exec_state_flag(EXEC_CYCLE_START);
             // Cancel any pending tool change
-            gc_state.tool_change = false;
+            gc_state.flags.tool_change = false;
             drop = true;
             if(grbl.on_cycle_start)
                 grbl.on_cycle_start();
