@@ -1,6 +1,6 @@
 ## grblHAL changelog
 
-<a name="202601101">Build 20261101
+<a name="202601029">Build 20261029
 
 Core:
 
