@@ -1823,7 +1823,7 @@ status_code_t gc_execute_block (char *block)
                                 break;
 
                             case 1: // M1 - program pause
-                                if(hal.signals_cap.stop_disable ? !hal.control.get_state().stop_disable : !sys.flags.optional_stop_disable)
+                                if(hal.signals_cap.stop_disable ? hal.control.get_state().stop_disable : sys.flags.optional_stop_disable)
                                     gc_block.modal.program_flow = ProgramFlow_OptionalStop;
                                 break;
 
