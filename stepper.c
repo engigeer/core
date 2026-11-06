@@ -118,9 +118,9 @@ DCRAM static struct {
     float current_speed;    // Current speed at the end of the segment buffer (mm/min)
     float maximum_speed;    // Maximum speed of executing block. Not always nominal speed. (mm/min)
     float exit_speed;       // Exit speed of executing block (mm/min)
-#ifdef KINEMATICS_API
+//#ifdef KINEMATICS_API
     float rate_multiplier;  // Rate multiplier of executing block.
-#endif
+//#endif
     float accelerate_until; // Acceleration ramp end measured from end of block (mm)
     float decelerate_after; // Deceleration ramp start measured from end of block (mm)
     float target_position;  //
@@ -968,9 +968,9 @@ void st_prep_buffer (void)
 #if ENABLE_JERK_ACCELERATION
                 prep.jerk = pl_block->condition.jerk;
 #endif
-#ifdef KINEMATICS_API
+//#ifdef KINEMATICS_API
                 prep.rate_multiplier = pl_block->rate_multiplier;
-#endif
+//#endif
 
                 if (sys.step_control.execute_hold || prep.recalculate.decel_override) {
                     // New block loaded mid-hold. Override planner block entry speed to enforce deceleration.
@@ -1460,7 +1460,7 @@ if(jlog.idx < sizeof(jlog.data) - 1 && prep.ramp_type != Ramp_Cruise) {
 float st_get_realtime_rate (void)
 {
     return state_get() & (STATE_CYCLE|STATE_HOMING|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
-#ifdef KINEMATICS_API
+#if 1//#ifdef KINEMATICS_API
             ? prep.current_speed * prep.rate_multiplier
 #else
             ? prep.current_speed

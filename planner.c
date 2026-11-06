@@ -514,7 +514,7 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
 
         } else if(gc_state.modal.units_imperial && settings.flags.revert_metric_conversion)
             pl_data->feed_rate *= INCH_PER_MM;// Revert in/min to mm/min conversion for angular motion
-    
+            pl_data->rate_multiplier /= INCH_PER_MM; 
     }
 
 #endif
@@ -551,9 +551,9 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
 #endif
     }
     block->rapid_rate = limit_max_rate_by_axis_maximum(unit_vec);
-#ifdef KINEMATICS_API
+//#ifdef KINEMATICS_API
     block->rate_multiplier = pl_data->rate_multiplier;
-#endif
+//#endif
 
     // Store programmed rate.
     if (block->condition.rapid_motion)
@@ -799,9 +799,9 @@ FLASHMEM void plan_data_init (plan_line_data_t *plan_data)
     plan_data->spindle.hal = gc_spindle_get(-1)->hal;
     plan_data->condition.no_feed_override = sys.override.control.feed_rates_disable;
     plan_data->condition.target_validated = plan_data->condition.target_valid = sys.soft_limits.mask == 0;
-#ifdef KINEMATICS_API
+//#ifdef KINEMATICS_API
     plan_data->rate_multiplier = 1.0f;
-#endif
+//#endif
 #if ENABLE_ACCELERATION_PROFILES
     plan_data->acceleration_factor = gc_get_accel_factor(0);
 #endif

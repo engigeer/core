@@ -89,9 +89,10 @@ status_code_t mc_line (float *target, plan_line_data_t *pl_data)
 {
 #ifdef KINEMATICS_API
     float feed_rate = pl_data->feed_rate;
-    pl_data->rate_multiplier = 1.0f;
+    //pl_data->rate_multiplier = 1.0f;
     target = kinematics.segment_line((coord_data_t *)target, (coord_data_t *)plan_get_position(), pl_data, true)->values;
 #endif
+    pl_data->rate_multiplier = 1.0f;
 
     // If enabled, check for soft limit violations. Placed here all line motions are picked up
     // from everywhere in grblHAL.

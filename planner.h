@@ -109,9 +109,9 @@ typedef struct plan_block {
     float max_junction_speed_sqr;   // Junction entry speed limit based on direction vectors in (mm/min)^2
     float rapid_rate;               // Axis-limit adjusted maximum rate for this block direction in (mm/min)
     float programmed_rate;          // Programmed rate of this block (mm/min).
-#ifdef KINEMATICS_API
+//#ifdef KINEMATICS_API
     float rate_multiplier;          // Rate multiplier of this block.
-#endif
+//#endif
 #if ENABLE_ACCELERATION_PROFILES
 //    float acceleration_factor;        // Stores the currently used acceleration factor.
 #endif
@@ -130,9 +130,9 @@ typedef struct plan_block {
 // Planner data prototype. Must be used when passing new motions to the planner.
 typedef struct {
     float feed_rate;                // Desired feed rate for line motion. Value is ignored, if rapid motion.
-#ifdef KINEMATICS_API
+//#ifdef KINEMATICS_API
     float rate_multiplier;          // Feed rate multiplier.
-#endif
+//#endif
 #if ENABLE_ACCELERATION_PROFILES
     float acceleration_factor;        // Stores the currently used acceleration factor.
 #endif
