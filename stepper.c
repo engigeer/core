@@ -1459,13 +1459,21 @@ if(jlog.idx < sizeof(jlog.data) - 1 && prep.ramp_type != Ramp_Cruise) {
 // divided by the ACCELERATION TICKS PER SECOND in seconds.
 float st_get_realtime_rate (void)
 {
-    return state_get() & (STATE_CYCLE|STATE_HOMING|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
+    plan_block_t *pl_block;
+
+    float rate = state_get() & (STATE_CYCLE|STATE_HOMING|STATE_HOLD|STATE_JOG|STATE_SAFETY_DOOR)
 #ifdef KINEMATICS_API
             ? prep.current_speed * prep.rate_multiplier
 #else
             ? prep.current_speed
 #endif
             : 0.0f;
+
+    // Angular motion with revert_metric_conversion runs at inch/min, convert back to mm/min for reporting.
+    if((pl_block = plan_get_current_block()) && pl_block->condition.rate_unconverted)
+        rate /= INCH_PER_MM;
+
+    return rate;
 }
 
 motion_mode_t st_get_motion_mode (void)

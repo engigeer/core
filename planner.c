@@ -514,7 +514,8 @@ bool plan_buffer_line (float *target, plan_line_data_t *pl_data)
 
         } else if(gc_state.modal.units_imperial && settings.flags.revert_metric_conversion && !block->condition.jog_motion) {
             pl_data->feed_rate *= INCH_PER_MM;// Revert in/min to mm/min conversion for angular motion
-    
+            block->condition.rate_unconverted = On;
+        }
     }
 
 #endif

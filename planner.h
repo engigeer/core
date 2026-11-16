@@ -39,11 +39,12 @@ typedef union {
                  target_valid         :1,
                  target_validated     :1,
                  probing_toolsetter   :1,
+                 rate_unconverted     :1, // Feed rate is in inch/min, not mm/min (angular motion with revert_metric_conversion)
 #if ENABLE_JERK_ACCELERATION
                  jerk                 :1,
-                 unassigned           :3;
+                 unassigned           :2;
 #else
-                 unassigned           :4;
+                 unassigned           :3;
 #endif
         coolant_state_t coolant;
     };
