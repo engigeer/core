@@ -238,9 +238,9 @@ bool protocol_main_loop (void)
 
                 line.data[line.pos] = '\0'; // Set string termination character.
 
-              #if REPORT_ECHO_LINE_RECEIVED
-                report_echo_line_received(line);
-              #endif
+#if REPORT_ECHO_LINE_RECEIVED
+                report_echo_line_received(line.data);
+#endif
 
                 // Direct and execute one line of formatted input, and report status of execution.
                 if(line.flags.overflow) // Report line overflow error.
